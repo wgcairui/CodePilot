@@ -2,21 +2,42 @@ import { NextRequest } from 'next/server';
 import { streamClaude } from '@/lib/claude-client';
 import { addMessage, getMessages, getSession, updateSessionTitle, updateSdkSessionId, updateSessionModel, updateSessionProvider, updateSessionProviderId, getSetting, getProvider, getDefaultProviderId, acquireSessionLock, renewSessionLock, releaseSessionLock, setSessionRuntimeStatus, syncSdkTasks } from '@/lib/db';
 import { notifySessionStart, notifySessionComplete, notifySessionError } from '@/lib/telegram-bot';
-import type { SendMessageRequest, SSEEvent, TokenUsage, MessageContentBlock, FileAttachment } from '@/types';
+import type { SendMessageRequest, SSEEvent, TokenUsage, MessageContentBlock, FileAttachment, ClaudeStreamOptions } from '@/types';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
+import os from 'os';
+import type { MCPServerConfig } from '@/types';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
+
+/** Read MCP server configs from ~/.claude.json and ~/.claude/settings.json */
+function loadMcpServers(): Record<string, MCPServerConfig> | undefined {
+  try {
+    const readJson = (p: string): Record<string, unknown> => {
+      if (!fs.existsSync(p)) return {};
+      try { return JSON.parse(fs.readFileSync(p, 'utf-8')); } catch { return {}; }
+    };
+    const userConfig = readJson(path.join(os.homedir(), '.claude.json'));
+    const settings = readJson(path.join(os.homedir(), '.claude', 'settings.json'));
+    const merged = {
+      ...((userConfig.mcpServers || {}) as Record<string, MCPServerConfig>),
+      ...((settings.mcpServers || {}) as Record<string, MCPServerConfig>),
+    };
+    return Object.keys(merged).length > 0 ? merged : undefined;
+  } catch {
+    return undefined;
+  }
+}
 
 export async function POST(request: NextRequest) {
   let activeSessionId: string | undefined;
   let activeLockId: string | undefined;
 
   try {
-    const body: SendMessageRequest & { files?: FileAttachment[]; toolTimeout?: number; provider_id?: string; systemPromptAppend?: string; autoTrigger?: boolean } = await request.json();
-    const { session_id, content, model, mode, files, toolTimeout, provider_id, systemPromptAppend, autoTrigger } = body;
+    const body: SendMessageRequest & { files?: FileAttachment[]; toolTimeout?: number; provider_id?: string; systemPromptAppend?: string; autoTrigger?: boolean; thinking?: unknown; effort?: string; enableFileCheckpointing?: boolean } = await request.json();
+    const { session_id, content, model, mode, files, toolTimeout, provider_id, systemPromptAppend, autoTrigger, thinking, effort, enableFileCheckpointing } = body;
 
     console.log('[chat API] content length:', content.length, 'first 200 chars:', content.slice(0, 200));
     console.log('[chat API] systemPromptAppend:', systemPromptAppend ? `${systemPromptAppend.length} chars` : 'none');
@@ -292,6 +313,10 @@ Start by greeting the user and asking the first question.
       content: m.content,
     }));
 
+    // Load MCP servers from Claude config files so the SDK knows about them
+    // even when settingSources skips 'user' (custom provider scenario).
+    const mcpServers = loadMcpServers();
+
     // Stream Claude response, using SDK session ID for resume if available
     console.log('[chat API] streamClaude params:', {
       promptLength: content.length,
@@ -313,8 +338,13 @@ Start by greeting the user and asking the first question.
       imageAgentMode: !!systemPromptAppend,
       toolTimeoutSeconds: toolTimeout || 300,
       provider: resolvedProvider,
+      mcpServers,
       conversationHistory: historyMsgs,
       bypassPermissions: session.permission_profile === 'full_access',
+      thinking: thinking as ClaudeStreamOptions['thinking'],
+      effort: effort as ClaudeStreamOptions['effort'],
+      enableFileCheckpointing: enableFileCheckpointing ?? (effectiveMode === 'code'),
+      autoTrigger: !!autoTrigger,
       onRuntimeStatusChange: (status: string) => {
         try { setSessionRuntimeStatus(session_id, status); } catch { /* best effort */ }
       },

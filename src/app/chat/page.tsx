@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Message, SSEEvent, SessionResponse, TokenUsage, PermissionRequestEvent } from '@/types';
 import { MessageList } from '@/components/chat/MessageList';
@@ -40,6 +40,22 @@ export default function NewChatPage() {
   const [streamingToolOutput, setStreamingToolOutput] = useState('');
   const [permissionProfile, setPermissionProfile] = useState<'default' | 'full_access'>('default');
   const abortControllerRef = useRef<AbortController | null>(null);
+  // Effort level — lifted here so the first message includes it
+  const [selectedEffort, setSelectedEffort] = useState<string | undefined>(undefined);
+  // Thinking mode from app settings
+  const [thinkingMode, setThinkingMode] = useState<string>('adaptive');
+
+  // Fetch thinking mode from app settings
+  useEffect(() => {
+    fetch('/api/settings/app')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.settings?.thinking_mode) {
+          setThinkingMode(data.settings.thinking_mode);
+        }
+      })
+      .catch(() => {});
+  }, []);
 
   const stopStreaming = useCallback(() => {
     abortControllerRef.current?.abort();
@@ -147,11 +163,25 @@ export default function NewChatPage() {
         };
         setMessages([userMessage]);
 
+        // Build thinking config from settings
+        const thinkingConfig = thinkingMode && thinkingMode !== 'adaptive'
+          ? { type: thinkingMode }
+          : thinkingMode === 'adaptive' ? { type: 'adaptive' } : undefined;
+
         // Send the message via streaming API
         const response = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ session_id: session.id, content, mode, model: currentModel, provider_id: currentProviderId, ...(systemPromptAppend ? { systemPromptAppend } : {}) }),
+          body: JSON.stringify({
+            session_id: session.id,
+            content,
+            mode,
+            model: currentModel,
+            provider_id: currentProviderId,
+            ...(systemPromptAppend ? { systemPromptAppend } : {}),
+            ...(selectedEffort ? { effort: selectedEffort } : {}),
+            ...(thinkingConfig ? { thinking: thinkingConfig } : {}),
+          }),
           signal: controller.signal,
         });
 
@@ -318,7 +348,7 @@ export default function NewChatPage() {
         abortControllerRef.current = null;
       }
     },
-    [isStreaming, router, workingDir, mode, currentModel, currentProviderId, permissionProfile, setPendingApprovalSessionId]
+    [isStreaming, router, workingDir, mode, currentModel, currentProviderId, permissionProfile, selectedEffort, thinkingMode, setPendingApprovalSessionId]
   );
 
   const handleCommand = useCallback((command: string) => {
@@ -388,6 +418,8 @@ export default function NewChatPage() {
         workingDirectory={workingDir}
         mode={mode}
         onModeChange={setMode}
+        effort={selectedEffort}
+        onEffortChange={setSelectedEffort}
       />
       <ChatComposerActionBar
         left={<ImageGenToggle />}

@@ -320,6 +320,29 @@ export async function GET(request: NextRequest) {
     const all = [...globalSkills, ...projectSkills, ...dedupedProjectSkills, ...installedSkills, ...pluginSkills];
     console.log(`[skills] Found: global=${globalSkills.length}, project=${projectSkills.length}, projectSkills=${dedupedProjectSkills.length}, installed=${installedSkills.length}, plugin=${pluginSkills.length}`);
 
+    // Merge SDK slash commands if available
+    try {
+      const { getCachedCommands } = await import('@/lib/agent-sdk-capabilities');
+      const sdkCommands = getCachedCommands('env');
+      if (sdkCommands.length > 0) {
+        const existingNames = new Set(all.map(s => s.name));
+        for (const cmd of sdkCommands) {
+          if (!existingNames.has(cmd.name)) {
+            all.push({
+              name: cmd.name,
+              description: cmd.description || `SDK command: /${cmd.name}`,
+              content: '', // SDK commands don't have local content
+              source: 'sdk' as typeof all[number]['source'],
+              filePath: '',
+            });
+          }
+        }
+        console.log(`[skills] Added ${sdkCommands.length} SDK commands (${sdkCommands.filter(c => !existingNames.has(c.name)).length} unique)`);
+      }
+    } catch {
+      // SDK capabilities not available, skip
+    }
+
     return NextResponse.json({ skills: all });
   } catch (error) {
     console.error('[skills] Error:', error);

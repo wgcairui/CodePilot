@@ -3,13 +3,21 @@
 import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/badge";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { PlusSignIcon, ListViewIcon, CodeIcon, Loading02Icon } from "@hugeicons/core-free-icons";
+import { PlusSignIcon, ListViewIcon, CodeIcon, Loading02Icon, RefreshIcon, Wifi01Icon } from "@hugeicons/core-free-icons";
 import { McpServerList } from "@/components/plugins/McpServerList";
 import { McpServerEditor } from "@/components/plugins/McpServerEditor";
 import { ConfigEditor } from "@/components/plugins/ConfigEditor";
 import { useTranslation } from "@/hooks/useTranslation";
+import type { TranslationKey } from "@/i18n";
 import type { MCPServer } from "@/types";
+
+interface McpRuntimeStatus {
+  name: string;
+  status: 'connected' | 'failed' | 'needs-auth' | 'pending' | 'disabled';
+  serverInfo?: { name: string; version: string };
+}
 
 export function McpManager() {
   const { t } = useTranslation();
@@ -20,6 +28,9 @@ export function McpManager() {
   const [editingServer, setEditingServer] = useState<MCPServer | undefined>();
   const [tab, setTab] = useState<"list" | "json">("list");
   const [error, setError] = useState<string | null>(null);
+  const [runtimeStatus, setRuntimeStatus] = useState<McpRuntimeStatus[]>([]);
+  const [runtimeLoading, setRuntimeLoading] = useState(false);
+  const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
 
   const fetchServers = useCallback(async () => {
     try {
@@ -39,9 +50,37 @@ export function McpManager() {
     }
   }, []);
 
+  const fetchRuntimeStatus = useCallback(async () => {
+    setRuntimeLoading(true);
+    try {
+      // Try to get active session from stream manager
+      const sessionsRes = await fetch('/api/chat/sessions?status=active&limit=1');
+      const sessionsData = await sessionsRes.json();
+      const sessionId = sessionsData?.sessions?.[0]?.id;
+
+      if (!sessionId) {
+        setActiveSessionId(null);
+        setRuntimeStatus([]);
+        return;
+      }
+
+      setActiveSessionId(sessionId);
+      const res = await fetch(`/api/plugins/mcp/status?sessionId=${encodeURIComponent(sessionId)}`);
+      const data = await res.json();
+      if (data.servers) {
+        setRuntimeStatus(data.servers);
+      }
+    } catch {
+      // Runtime status unavailable
+    } finally {
+      setRuntimeLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     fetchServers();
-  }, [fetchServers]);
+    fetchRuntimeStatus();
+  }, [fetchServers, fetchRuntimeStatus]);
 
   function handleEdit(name: string, server: MCPServer) {
     setEditingName(name);
@@ -188,6 +227,8 @@ export function McpManager() {
               servers={servers}
               onEdit={handleEdit}
               onDelete={handleDelete}
+              runtimeStatus={runtimeStatus}
+              activeSessionId={activeSessionId || undefined}
             />
           )}
         </TabsContent>
@@ -200,6 +241,56 @@ export function McpManager() {
           />
         </TabsContent>
       </Tabs>
+
+      {/* Runtime Status Section */}
+      <div className="mt-6 border-t pt-4">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <HugeiconsIcon icon={Wifi01Icon} className="h-4 w-4 text-muted-foreground" />
+            <h4 className="text-sm font-medium">{t('mcp.runtimeStatus' as TranslationKey)}</h4>
+          </div>
+          <Button
+            variant="ghost"
+            size="sm"
+            className="h-7 gap-1 text-xs"
+            onClick={fetchRuntimeStatus}
+            disabled={runtimeLoading}
+          >
+            <HugeiconsIcon icon={runtimeLoading ? Loading02Icon : RefreshIcon} className={`h-3 w-3 ${runtimeLoading ? 'animate-spin' : ''}`} />
+            {t('mcp.refresh' as TranslationKey)}
+          </Button>
+        </div>
+
+        {!activeSessionId ? (
+          <p className="text-xs text-muted-foreground py-4 text-center">
+            {t('mcp.noActiveSession' as TranslationKey)}
+          </p>
+        ) : runtimeStatus.length === 0 ? (
+          <p className="text-xs text-muted-foreground py-4 text-center">
+            {t('mcp.noRuntimeStatus' as TranslationKey)}
+          </p>
+        ) : (
+          <div className="space-y-1.5">
+            {runtimeStatus.map((s) => (
+              <div key={s.name} className="flex items-center justify-between py-1.5 px-2 rounded-md bg-muted/30">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className={`h-2 w-2 rounded-full shrink-0 ${
+                    s.status === 'connected' ? 'bg-green-500' :
+                    s.status === 'failed' ? 'bg-red-500' :
+                    s.status === 'pending' ? 'bg-blue-500' :
+                    s.status === 'disabled' ? 'bg-gray-400' :
+                    'bg-yellow-500'
+                  }`} />
+                  <span className="text-xs font-medium truncate">{s.name}</span>
+                </div>
+                <Badge variant="outline" className="text-[10px] shrink-0">
+                  {s.status}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       <McpServerEditor
         open={editorOpen}

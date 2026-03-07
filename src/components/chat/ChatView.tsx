@@ -19,6 +19,7 @@ import {
   stopStream,
   subscribe,
   getSnapshot,
+  getRewindPoints,
   respondToPermission,
   clearSnapshot,
 } from '@/lib/stream-session-manager';
@@ -48,6 +49,10 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
   const [mode, setMode] = useState(initialMode || 'code');
   const [currentModel, setCurrentModel] = useState(modelName || (typeof window !== 'undefined' ? localStorage.getItem('codepilot:last-model') : null) || 'sonnet');
   const [currentProviderId, setCurrentProviderId] = useState(providerId || (typeof window !== 'undefined' ? localStorage.getItem('codepilot:last-provider-id') : null) || '');
+  // Effort level selected in MessageInput — lifted here so it enters the stream chain
+  const [selectedEffort, setSelectedEffort] = useState<string | undefined>(undefined);
+  // Thinking mode from app settings
+  const [thinkingMode, setThinkingMode] = useState<string>('adaptive');
 
   // Sync model/provider when session data loads (props update after async fetch)
   // Unconditional: when modelName is empty (old session with no saved model),
@@ -58,6 +63,18 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
   useEffect(() => {
     setCurrentProviderId(providerId || (typeof window !== 'undefined' ? localStorage.getItem('codepilot:last-provider-id') : null) || '');
   }, [providerId]);
+
+  // Fetch thinking mode from app settings
+  useEffect(() => {
+    fetch('/api/settings/app')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.settings?.thinking_mode) {
+          setThinkingMode(data.settings.thinking_mode);
+        }
+      })
+      .catch(() => {});
+  }, []);
   useEffect(() => {
     if (initialPermissionProfile) {
       setPermissionProfile(initialPermissionProfile);
@@ -78,6 +95,7 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
   const statusText = streamSnapshot?.statusText;
   const pendingPermission = streamSnapshot?.pendingPermission ?? null;
   const permissionResolved = streamSnapshot?.permissionResolved ?? null;
+  const rewindPoints = getRewindPoints(sessionId);
 
   // Pending image generation notices — flushed into the next user message so the LLM knows about generated images
   const pendingImageNoticesRef = useRef<string[]>([]);
@@ -290,6 +308,7 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
         model: currentModel,
         providerId: currentProviderId,
         autoTrigger: true,
+        thinking: buildThinkingConfig(),
         onModeChanged: (sdkMode) => {
           const uiMode = sdkMode === 'plan' ? 'plan' : 'code';
           handleModeChange(uiMode);
@@ -468,6 +487,14 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
     }
   }, [sessionId, workingDirectory]);
 
+  // Build SDK thinking config from settings
+  const buildThinkingConfig = useCallback((): { type: string } | undefined => {
+    if (!thinkingMode || thinkingMode === 'adaptive') return { type: 'adaptive' };
+    if (thinkingMode === 'enabled') return { type: 'enabled' };
+    if (thinkingMode === 'disabled') return { type: 'disabled' };
+    return undefined;
+  }, [thinkingMode]);
+
   // Send message — delegates stream management to the manager
   const sendMessage = useCallback(
     async (content: string, files?: FileAttachment[], systemPromptAppend?: string, displayOverride?: string) => {
@@ -512,6 +539,8 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
         files,
         systemPromptAppend,
         pendingImageNotices: notices,
+        effort: selectedEffort,
+        thinking: buildThinkingConfig(),
         onModeChanged: (sdkMode) => {
           const uiMode = sdkMode === 'plan' ? 'plan' : 'code';
           handleModeChange(uiMode);
@@ -521,7 +550,7 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
         },
       });
     },
-    [sessionId, isStreaming, mode, currentModel, currentProviderId, handleModeChange]
+    [sessionId, isStreaming, mode, currentModel, currentProviderId, selectedEffort, buildThinkingConfig, handleModeChange]
   );
 
   // Keep sendMessageRef in sync so timeout auto-retry can call it
@@ -663,6 +692,8 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
         hasMore={hasMore}
         loadingMore={loadingMore}
         onLoadMore={loadEarlierMessages}
+        rewindPoints={rewindPoints}
+        sessionId={sessionId}
       />
       {/* Permission prompt — rendered outside MessageList so it's always visible at bottom */}
       <PermissionPrompt
@@ -692,6 +723,8 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
         mode={mode}
         onModeChange={handleModeChange}
         onAssistantTrigger={checkAssistantTrigger}
+        effort={selectedEffort}
+        onEffortChange={setSelectedEffort}
       />
       <ChatComposerActionBar
         left={<ImageGenToggle />}

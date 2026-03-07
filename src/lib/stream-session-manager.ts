@@ -42,6 +42,7 @@ interface ActiveStream {
   toolTimeoutInfo: { toolName: string; elapsedSeconds: number } | null;
   isIdleTimeout: boolean;
   sendMessageFn: ((content: string, files?: FileAttachment[]) => void) | null;
+  rewindPoints: Array<{ userMessageId: string }>;
 }
 
 export interface StartStreamParams {
@@ -59,6 +60,10 @@ export interface StartStreamParams {
   onModeChanged?: (mode: string) => void;
   /** Reference to the outer sendMessage so tool-timeout auto-retry works */
   sendMessageFn?: (content: string, files?: FileAttachment[]) => void;
+  /** SDK effort level (low/medium/high/max) — only sent when model supports it */
+  effort?: string;
+  /** SDK thinking config */
+  thinking?: { type: string; budgetTokens?: number };
 }
 
 // ==========================================
@@ -187,6 +192,7 @@ export function startStream(params: StartStreamParams): void {
     toolTimeoutInfo: null,
     isIdleTimeout: false,
     sendMessageFn: params.sendMessageFn ?? null,
+    rewindPoints: [],
   };
 
   map.set(params.sessionId, stream);
@@ -228,6 +234,8 @@ async function runStream(stream: ActiveStream, params: StartStreamParams): Promi
         ...(params.files && params.files.length > 0 ? { files: params.files } : {}),
         ...(params.systemPromptAppend ? { systemPromptAppend: params.systemPromptAppend } : {}),
         ...(params.autoTrigger ? { autoTrigger: true } : {}),
+        ...(params.effort ? { effort: params.effort } : {}),
+        ...(params.thinking ? { thinking: params.thinking } : {}),
       }),
       signal: stream.abortController.signal,
     });
@@ -323,6 +331,10 @@ async function runStream(stream: ActiveStream, params: StartStreamParams): Promi
       onTaskUpdate: () => {
         markActive();
         window.dispatchEvent(new CustomEvent('tasks-updated'));
+      },
+      onRewindPoint: (sdkUserMessageId) => {
+        markActive();
+        stream.rewindPoints = [...stream.rewindPoints, { userMessageId: sdkUserMessageId }];
       },
       onKeepAlive: () => {
         markActive();
@@ -497,7 +509,21 @@ async function runStream(stream: ActiveStream, params: StartStreamParams): Promi
 export function stopStream(sessionId: string): void {
   const stream = getStreamsMap().get(sessionId);
   if (stream && stream.snapshot.phase === 'active') {
-    stream.abortController.abort();
+    // Try graceful interrupt first, fallback to abort
+    fetch('/api/chat/interrupt', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sessionId }),
+    }).catch(() => {
+      // Interrupt failed, force abort
+    }).finally(() => {
+      // Always abort after a short delay to ensure cleanup
+      setTimeout(() => {
+        if (stream.snapshot.phase === 'active') {
+          stream.abortController.abort();
+        }
+      }, 2000);
+    });
   }
 }
 
@@ -537,6 +563,11 @@ export function getSnapshot(sessionId: string): SessionStreamSnapshot | null {
 export function isStreamActive(sessionId: string): boolean {
   const stream = getStreamsMap().get(sessionId);
   return stream?.snapshot.phase === 'active' || false;
+}
+
+export function getRewindPoints(sessionId: string): Array<{ userMessageId: string }> {
+  const stream = getStreamsMap().get(sessionId);
+  return stream?.rewindPoints ?? [];
 }
 
 export function getActiveSessionIds(): string[] {

@@ -19,6 +19,7 @@ import type { ClaudeStreamOptions, SSEEvent, TokenUsage, MCPServerConfig, Permis
 import { isImageFile } from '@/types';
 import { registerPendingPermission } from './permission-registry';
 import { registerConversation, unregisterConversation } from './conversation-registry';
+import { captureCapabilities } from './agent-sdk-capabilities';
 import { getSetting, getActiveProvider, updateSdkSessionId, createPermissionRequest } from './db';
 import { findClaudeBinary, findGitBash, getExpandedPath } from './platform';
 import { notifyPermissionRequest, notifyGeneric } from './telegram-bot';
@@ -281,6 +282,13 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
     onRuntimeStatusChange,
     imageAgentMode,
     bypassPermissions: sessionBypassPermissions,
+    thinking,
+    effort,
+    outputFormat,
+    agents,
+    agent,
+    enableFileCheckpointing,
+    autoTrigger,
   } = options;
 
   return new ReadableStream<string>({
@@ -428,6 +436,26 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
         // is now automatically loaded by the SDK via settingSources: ['user', 'project', 'local'].
         if (mcpServers && Object.keys(mcpServers).length > 0) {
           queryOptions.mcpServers = toSdkMcpConfig(mcpServers);
+        }
+
+        // Pass through SDK-specific options from ClaudeStreamOptions
+        if (thinking) {
+          queryOptions.thinking = thinking;
+        }
+        if (effort) {
+          queryOptions.effort = effort;
+        }
+        if (outputFormat) {
+          queryOptions.outputFormat = outputFormat;
+        }
+        if (agents) {
+          queryOptions.agents = agents as Options['agents'];
+        }
+        if (agent) {
+          queryOptions.agent = agent;
+        }
+        if (enableFileCheckpointing) {
+          queryOptions.enableFileCheckpointing = true;
         }
 
         // Resume session if we have an SDK session ID from a previous conversation turn.
@@ -732,6 +760,13 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
 
         registerConversation(sessionId, conversation);
 
+        // Fire-and-forget: capture SDK capabilities for UI consumption
+        // Scope to provider so different providers don't pollute each other's cache
+        const capProviderId = activeProvider?.api_key ? (options.provider as ApiProvider & { id?: string })?.id || 'custom' : 'env';
+        captureCapabilities(sessionId, conversation, capProviderId).catch((err) => {
+          console.warn('[claude-client] Capability capture failed:', err);
+        });
+
         let lastAssistantText = '';
         let tokenUsage: TokenUsage | null = null;
 
@@ -792,6 +827,20 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
                   }
                 }
               }
+
+              // Emit rewind_point for file checkpointing — only for prompt-level
+              // user messages (parent_tool_use_id === null), and skip auto-trigger
+              // turns which are invisible to the user (onboarding/check-in).
+              if (
+                userMsg.parent_tool_use_id === null &&
+                !autoTrigger &&
+                userMsg.uuid
+              ) {
+                controller.enqueue(formatSSE({
+                  type: 'rewind_point',
+                  data: JSON.stringify({ userMessageId: userMsg.uuid }),
+                }));
+              }
               break;
             }
 
@@ -816,6 +865,7 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
                     data: JSON.stringify({
                       session_id: sysMsg.session_id,
                       model: sysMsg.model,
+                      requested_model: model,
                       tools: sysMsg.tools,
                     }),
                   }));

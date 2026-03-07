@@ -96,6 +96,28 @@ export async function GET() {
       }),
     });
 
+    // If SDK has discovered models, use them for the env group
+    try {
+      const { getCachedModels } = await import('@/lib/agent-sdk-capabilities');
+      const sdkModels = getCachedModels('env');
+      if (sdkModels.length > 0) {
+        groups[0].models = sdkModels.map(m => {
+          const cw = getContextWindow(m.value);
+          return {
+            value: m.value,
+            label: m.displayName,
+            description: m.description,
+            supportsEffort: m.supportsEffort,
+            supportedEffortLevels: m.supportedEffortLevels,
+            supportsAdaptiveThinking: m.supportsAdaptiveThinking,
+            ...(cw != null ? { contextWindow: cw } : {}),
+          };
+        });
+      }
+    } catch {
+      // SDK capabilities not available, keep defaults
+    }
+
     // Provider types that are not LLMs (e.g. image generation) — skip in chat model selector
     const MEDIA_PROVIDER_TYPES = new Set(['gemini-image']);
 

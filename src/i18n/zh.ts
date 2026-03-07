@@ -763,6 +763,40 @@ const zh: Record<TranslationKey, string> = {
   'context.estimate': '基于最近一轮响应估算',
   'context.noData': '暂无上下文统计',
   'context.unknown': '未知上下文窗口',
+
+  // ── SDK Capabilities: Effort ──────────────────────────────
+  'messageInput.effort.label': '推理力度',
+  'messageInput.effort.low': '低',
+  'messageInput.effort.medium': '中',
+  'messageInput.effort.high': '高',
+  'messageInput.effort.max': '最大',
+
+  // ── SDK Capabilities: Rewind ──────────────────────────────
+  'messageList.rewindToHere': '回滚到此处',
+  'messageList.rewindConfirm': '确认回滚',
+  'messageList.rewindCancel': '取消',
+  'messageList.rewindDone': '文件回滚成功',
+
+  // ── SDK Capabilities: MCP Runtime ─────────────────────────
+  'mcp.runtimeStatus': '运行状态',
+  'mcp.refresh': '刷新',
+  'mcp.noActiveSession': '开始对话后可查看实时状态',
+  'mcp.noRuntimeStatus': '暂无运行状态信息',
+  'mcp.reconnect': '重连',
+  'mcp.enable': '启用',
+
+  // ── SDK Capabilities: Thinking ────────────────────────────
+  'settings.thinkingMode': '思考模式',
+  'settings.thinkingModeDesc': '控制 Claude 的扩展思考行为',
+  'settings.thinkingAdaptive': '自适应',
+  'settings.thinkingEnabled': '启用',
+  'settings.thinkingDisabled': '禁用',
+
+  // ── SDK Capabilities: Account ─────────────────────────────
+  'settings.accountInfo': '账户信息',
+  'settings.email': '邮箱',
+  'settings.organization': '组织',
+  'settings.subscription': '订阅类型',
 };
 
 export default zh;

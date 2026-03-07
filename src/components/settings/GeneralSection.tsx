@@ -18,6 +18,7 @@ import { ReloadIcon, Loading02Icon } from "@hugeicons/core-free-icons";
 import { useUpdate } from "@/hooks/useUpdate";
 import { useTranslation } from "@/hooks/useTranslation";
 import { SUPPORTED_LOCALES, type Locale } from "@/i18n";
+import type { TranslationKey } from "@/i18n";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 function UpdateCard() {
@@ -121,6 +122,8 @@ export function GeneralSection() {
   const [skipPermissions, setSkipPermissions] = useState(false);
   const [showSkipPermWarning, setShowSkipPermWarning] = useState(false);
   const [skipPermSaving, setSkipPermSaving] = useState(false);
+  const [thinkingMode, setThinkingMode] = useState<string>('adaptive');
+  const [accountInfo, setAccountInfo] = useState<{ email?: string; organization?: string; subscriptionType?: string } | null>(null);
   const { t, locale, setLocale } = useTranslation();
 
   const fetchAppSettings = useCallback(async () => {
@@ -130,15 +133,48 @@ export function GeneralSection() {
         const data = await res.json();
         const appSettings = data.settings || {};
         setSkipPermissions(appSettings.dangerously_skip_permissions === "true");
+        if (appSettings.thinking_mode) {
+          setThinkingMode(appSettings.thinking_mode);
+        }
       }
     } catch {
       // ignore
     }
   }, []);
 
+  const fetchAccountInfo = useCallback(async () => {
+    try {
+      const res = await fetch("/api/sdk/account");
+      if (res.ok) {
+        const data = await res.json();
+        if (data.account) {
+          setAccountInfo(data.account);
+        }
+      }
+    } catch {
+      // Account info not available
+    }
+  }, []);
+
   useEffect(() => {
     fetchAppSettings();
-  }, [fetchAppSettings]);
+    fetchAccountInfo();
+  }, [fetchAppSettings, fetchAccountInfo]);
+
+  const saveThinkingMode = async (mode: string) => {
+    setThinkingMode(mode);
+    try {
+      await fetch("/api/settings/app", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          settings: { thinking_mode: mode },
+        }),
+      });
+    } catch {
+      // ignore
+    }
+  };
 
   const handleSkipPermToggle = (checked: boolean) => {
     if (checked) {
@@ -215,6 +251,50 @@ export function GeneralSection() {
           </Select>
         </div>
       </div>
+
+      {/* Thinking mode */}
+      <div className="rounded-lg border border-border/50 p-4 transition-shadow hover:shadow-sm">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-sm font-medium">{t('settings.thinkingMode' as TranslationKey)}</h2>
+            <p className="text-xs text-muted-foreground">{t('settings.thinkingModeDesc' as TranslationKey)}</p>
+          </div>
+          <Select value={thinkingMode} onValueChange={saveThinkingMode}>
+            <SelectTrigger className="w-[140px]">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="adaptive">{t('settings.thinkingAdaptive' as TranslationKey)}</SelectItem>
+              <SelectItem value="enabled">{t('settings.thinkingEnabled' as TranslationKey)}</SelectItem>
+              <SelectItem value="disabled">{t('settings.thinkingDisabled' as TranslationKey)}</SelectItem>
+            </SelectContent>
+          </Select>
+        </div>
+      </div>
+
+      {/* Account info */}
+      {accountInfo && (
+        <div className="rounded-lg border border-border/50 p-4 transition-shadow hover:shadow-sm">
+          <h2 className="text-sm font-medium mb-2">{t('settings.accountInfo' as TranslationKey)}</h2>
+          <div className="space-y-1">
+            {accountInfo.email && (
+              <p className="text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">{t('settings.email' as TranslationKey)}:</span> {accountInfo.email}
+              </p>
+            )}
+            {accountInfo.organization && (
+              <p className="text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">{t('settings.organization' as TranslationKey)}:</span> {accountInfo.organization}
+              </p>
+            )}
+            {accountInfo.subscriptionType && (
+              <p className="text-xs text-muted-foreground">
+                <span className="font-medium text-foreground">{t('settings.subscription' as TranslationKey)}:</span> {accountInfo.subscriptionType}
+              </p>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Skip-permissions warning dialog */}
       <AlertDialog open={showSkipPermWarning} onOpenChange={setShowSkipPermWarning}>

@@ -766,6 +766,40 @@ const en = {
   'context.estimate': 'Estimated from the most recent response',
   'context.noData': 'No context usage data yet',
   'context.unknown': 'Unknown',
+
+  // ── SDK Capabilities: Effort ──────────────────────────────
+  'messageInput.effort.label': 'Effort Level',
+  'messageInput.effort.low': 'Low',
+  'messageInput.effort.medium': 'Medium',
+  'messageInput.effort.high': 'High',
+  'messageInput.effort.max': 'Max',
+
+  // ── SDK Capabilities: Rewind ──────────────────────────────
+  'messageList.rewindToHere': 'Rewind to here',
+  'messageList.rewindConfirm': 'Confirm rewind',
+  'messageList.rewindCancel': 'Cancel',
+  'messageList.rewindDone': 'Files rewound successfully',
+
+  // ── SDK Capabilities: MCP Runtime ─────────────────────────
+  'mcp.runtimeStatus': 'Runtime Status',
+  'mcp.refresh': 'Refresh',
+  'mcp.noActiveSession': 'Start a conversation to see live status',
+  'mcp.noRuntimeStatus': 'No runtime status available',
+  'mcp.reconnect': 'Reconnect',
+  'mcp.enable': 'Enable',
+
+  // ── SDK Capabilities: Thinking ────────────────────────────
+  'settings.thinkingMode': 'Thinking Mode',
+  'settings.thinkingModeDesc': 'Control Claude\'s extended thinking behavior',
+  'settings.thinkingAdaptive': 'Adaptive',
+  'settings.thinkingEnabled': 'Enabled',
+  'settings.thinkingDisabled': 'Disabled',
+
+  // ── SDK Capabilities: Account ─────────────────────────────
+  'settings.accountInfo': 'Account Information',
+  'settings.email': 'Email',
+  'settings.organization': 'Organization',
+  'settings.subscription': 'Subscription',
 } as const;
 
 export type TranslationKey = keyof typeof en;

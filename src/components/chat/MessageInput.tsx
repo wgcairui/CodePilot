@@ -98,6 +98,9 @@ interface MessageInputProps {
   mode?: string;
   onModeChange?: (mode: string) => void;
   onAssistantTrigger?: () => void;
+  /** Effort selection lifted to parent for inclusion in the stream chain */
+  effort?: string;
+  onEffortChange?: (effort: string | undefined) => void;
 }
 
 interface PopoverItem {
@@ -375,6 +378,8 @@ export function MessageInput({
   mode = 'code',
   onModeChange,
   onAssistantTrigger,
+  effort: effortProp,
+  onEffortChange,
 }: MessageInputProps) {
   const { t } = useTranslation();
   const imageGen = useImageGen();
@@ -932,6 +937,31 @@ export function MessageInput({
   const currentModelValue = modelName || 'sonnet';
   const currentModelOption = MODEL_OPTIONS.find((m) => m.value === currentModelValue) || MODEL_OPTIONS[0];
 
+  // Effort selector state — only shown when the current model supports effort
+  const currentModelMeta = currentModelOption as typeof currentModelOption & { supportsEffort?: boolean; supportedEffortLevels?: string[] };
+  const showEffortSelector = currentModelMeta.supportsEffort === true;
+  // Use prop if provided (lifted state), otherwise local state
+  const [localEffort, setLocalEffort] = useState<string>('high');
+  const selectedEffort = effortProp ?? localEffort;
+  const setSelectedEffort = useCallback((v: string) => {
+    setLocalEffort(v);
+    onEffortChange?.(v);
+  }, [onEffortChange]);
+  const [effortMenuOpen, setEffortMenuOpen] = useState(false);
+  const effortMenuRef = useRef<HTMLDivElement>(null);
+
+  // Close effort menu on outside click
+  useEffect(() => {
+    if (!effortMenuOpen) return;
+    const handler = (e: MouseEvent) => {
+      if (effortMenuRef.current && !effortMenuRef.current.contains(e.target as Node)) {
+        setEffortMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, [effortMenuOpen]);
+
   // Map isStreaming to ChatStatus for PromptInputSubmit
   const chatStatus: ChatStatus = isStreaming ? 'streaming' : 'ready';
 
@@ -1190,6 +1220,44 @@ export function MessageInput({
                     </div>
                   )}
                 </div>
+
+                {/* Effort selector — only visible when model supports effort */}
+                {showEffortSelector && (
+                  <div className="relative" ref={effortMenuRef}>
+                    <PromptInputButton
+                      onClick={() => setEffortMenuOpen((prev) => !prev)}
+                    >
+                      <span className="text-xs">{t(`messageInput.effort.${selectedEffort}` as TranslationKey)}</span>
+                      <HugeiconsIcon icon={ArrowDown01Icon} className={cn("h-2.5 w-2.5 transition-transform duration-200", effortMenuOpen && "rotate-180")} />
+                    </PromptInputButton>
+
+                    {effortMenuOpen && (
+                      <div className="absolute bottom-full left-0 mb-1.5 w-36 rounded-lg border bg-popover shadow-lg overflow-hidden z-50">
+                        <div className="px-3 py-1.5 text-[10px] font-medium text-muted-foreground">
+                          {t('messageInput.effort.label' as TranslationKey)}
+                        </div>
+                        <div className="py-0.5">
+                          {(currentModelMeta.supportedEffortLevels || ['low', 'medium', 'high', 'max']).map((level) => (
+                            <button
+                              key={level}
+                              className={cn(
+                                "flex w-full items-center justify-between gap-2 px-3 py-1.5 text-left text-sm transition-colors",
+                                selectedEffort === level ? "bg-accent text-accent-foreground" : "hover:bg-accent/50"
+                              )}
+                              onClick={() => {
+                                setSelectedEffort(level);
+                                setEffortMenuOpen(false);
+                              }}
+                            >
+                              <span className="text-xs">{t(`messageInput.effort.${level}` as TranslationKey)}</span>
+                              {selectedEffort === level && <span className="text-xs">✓</span>}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
 
               </PromptInputTools>
 

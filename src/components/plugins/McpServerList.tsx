@@ -4,15 +4,24 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { HugeiconsIcon } from "@hugeicons/react";
-import type { IconSvgElement } from "@hugeicons/react";
-import { Delete02Icon, PencilIcon, ServerStack01Icon, Wifi01Icon, GlobeIcon } from "@hugeicons/core-free-icons";
+import { Delete02Icon, PencilIcon, ServerStack01Icon, Wifi01Icon, GlobeIcon, RefreshIcon, Loading02Icon } from "@hugeicons/core-free-icons";
 import { useTranslation } from '@/hooks/useTranslation';
+import type { TranslationKey } from '@/i18n';
 import type { MCPServer } from '@/types';
+import { useState, useCallback } from 'react';
+
+interface McpRuntimeStatus {
+  name: string;
+  status: 'connected' | 'failed' | 'needs-auth' | 'pending' | 'disabled';
+  serverInfo?: { name: string; version: string };
+}
 
 interface McpServerListProps {
   servers: Record<string, MCPServer>;
   onEdit: (name: string, server: MCPServer) => void;
   onDelete: (name: string) => void;
+  runtimeStatus?: McpRuntimeStatus[];
+  activeSessionId?: string;
 }
 
 function getServerTypeInfo(server: MCPServer) {
@@ -27,9 +36,68 @@ function getServerTypeInfo(server: MCPServer) {
   }
 }
 
-export function McpServerList({ servers, onEdit, onDelete }: McpServerListProps) {
+function getStatusBadge(status: McpRuntimeStatus['status']) {
+  switch (status) {
+    case 'connected':
+      return { label: 'Connected', className: 'bg-green-500/10 text-green-600 border-green-500/20' };
+    case 'failed':
+      return { label: 'Failed', className: 'bg-red-500/10 text-red-600 border-red-500/20' };
+    case 'needs-auth':
+      return { label: 'Auth Required', className: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20' };
+    case 'pending':
+      return { label: 'Pending', className: 'bg-blue-500/10 text-blue-600 border-blue-500/20' };
+    case 'disabled':
+      return { label: 'Disabled', className: 'bg-gray-500/10 text-gray-500 border-gray-500/20' };
+    default:
+      return { label: status, className: '' };
+  }
+}
+
+export function McpServerList({ servers, onEdit, onDelete, runtimeStatus, activeSessionId }: McpServerListProps) {
   const { t } = useTranslation();
   const entries = Object.entries(servers);
+  const [reconnecting, setReconnecting] = useState<Set<string>>(new Set());
+  const [toggling, setToggling] = useState<Set<string>>(new Set());
+
+  const handleReconnect = useCallback(async (serverName: string) => {
+    if (!activeSessionId) return;
+    setReconnecting(prev => new Set(prev).add(serverName));
+    try {
+      await fetch('/api/plugins/mcp/reconnect', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: activeSessionId, serverName }),
+      });
+    } catch {
+      // Best effort
+    } finally {
+      setReconnecting(prev => {
+        const next = new Set(prev);
+        next.delete(serverName);
+        return next;
+      });
+    }
+  }, [activeSessionId]);
+
+  const handleToggle = useCallback(async (serverName: string, enabled: boolean) => {
+    if (!activeSessionId) return;
+    setToggling(prev => new Set(prev).add(serverName));
+    try {
+      await fetch('/api/plugins/mcp/toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sessionId: activeSessionId, serverName, enabled }),
+      });
+    } catch {
+      // Best effort
+    } finally {
+      setToggling(prev => {
+        const next = new Set(prev);
+        next.delete(serverName);
+        return next;
+      });
+    }
+  }, [activeSessionId]);
 
   if (entries.length === 0) {
     return (
@@ -43,10 +111,23 @@ export function McpServerList({ servers, onEdit, onDelete }: McpServerListProps)
     );
   }
 
+  // Build a lookup for runtime status by server name
+  const statusByName = new Map<string, McpRuntimeStatus>();
+  if (runtimeStatus) {
+    for (const s of runtimeStatus) {
+      statusByName.set(s.name, s);
+    }
+  }
+
   return (
     <div className="space-y-3">
       {entries.map(([name, server]) => {
         const typeInfo = getServerTypeInfo(server);
+        const runtime = statusByName.get(name);
+        const statusBadge = runtime ? getStatusBadge(runtime.status) : null;
+        const isReconnecting = reconnecting.has(name);
+        const isToggling = toggling.has(name);
+
         return (
           <Card key={name}>
             <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
@@ -57,17 +138,60 @@ export function McpServerList({ servers, onEdit, onDelete }: McpServerListProps)
                   <Badge variant="outline" className="text-xs shrink-0">
                     {typeInfo.label}
                   </Badge>
-                  <Badge variant="secondary" className="text-xs shrink-0">
-                    {t('provider.configured')}
-                  </Badge>
+                  {statusBadge ? (
+                    <Badge variant="outline" className={`text-xs shrink-0 ${statusBadge.className}`}>
+                      {statusBadge.label}
+                    </Badge>
+                  ) : (
+                    <Badge variant="secondary" className="text-xs shrink-0">
+                      {t('provider.configured')}
+                    </Badge>
+                  )}
                 </div>
                 <CardDescription className="text-xs mt-1 font-mono">
                   {server.url
                     ? server.url
                     : `${server.command} ${server.args?.join(' ') || ''}`}
                 </CardDescription>
+                {runtime?.serverInfo && (
+                  <p className="text-[10px] text-muted-foreground mt-0.5">
+                    {runtime.serverInfo.name} v{runtime.serverInfo.version}
+                  </p>
+                )}
               </div>
               <div className="flex gap-1 shrink-0">
+                {/* Reconnect button — only for failed servers */}
+                {runtime?.status === 'failed' && activeSessionId && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8"
+                    disabled={isReconnecting}
+                    onClick={() => handleReconnect(name)}
+                    title={t('mcp.reconnect' as TranslationKey)}
+                  >
+                    {isReconnecting ? (
+                      <HugeiconsIcon icon={Loading02Icon} className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <HugeiconsIcon icon={RefreshIcon} className="h-3.5 w-3.5" />
+                    )}
+                  </Button>
+                )}
+                {/* Enable button — only for disabled servers */}
+                {runtime?.status === 'disabled' && activeSessionId && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-8 text-xs"
+                    disabled={isToggling}
+                    onClick={() => handleToggle(name, true)}
+                  >
+                    {isToggling ? (
+                      <HugeiconsIcon icon={Loading02Icon} className="h-3.5 w-3.5 animate-spin mr-1" />
+                    ) : null}
+                    {t('mcp.enable' as TranslationKey)}
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   size="icon"

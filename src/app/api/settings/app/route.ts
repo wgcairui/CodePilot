@@ -11,6 +11,7 @@ const ALLOWED_KEYS = [
   'anthropic_base_url',
   'dangerously_skip_permissions',
   'locale',
+  'thinking_mode',
 ];
 
 export async function GET() {

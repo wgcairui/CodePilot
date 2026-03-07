@@ -123,7 +123,15 @@ export interface ProviderModelGroup {
   provider_id: string;       // provider DB id, or 'env' for environment variables
   provider_name: string;
   provider_type: string;
-  models: Array<{ value: string; label: string; contextWindow?: number }>;
+  models: Array<{
+    value: string;
+    label: string;
+    contextWindow?: number;
+    description?: string;
+    supportsEffort?: boolean;
+    supportedEffortLevels?: string[];
+    supportsAdaptiveThinking?: boolean;
+  }>;
 }
 
 export interface CreateProviderRequest {
@@ -359,6 +367,7 @@ export type SSEEventType =
   | 'mode_changed'       // SDK permission mode changed (e.g. plan → code)
   | 'task_update'        // SDK TodoWrite task sync
   | 'keep_alive'         // SDK keep-alive heartbeat (resets idle timer)
+  | 'rewind_point'       // SDK user message with rewind checkpoint
   | 'done';              // stream complete
 
 export interface SSEEvent {
@@ -817,4 +826,18 @@ export interface ClaudeStreamOptions {
   onRuntimeStatusChange?: (status: string) => void;
   /** Per-session bypass: when true, skip all permission checks for this session */
   bypassPermissions?: boolean;
+  /** Thinking configuration for the query */
+  thinking?: { type: 'adaptive' } | { type: 'enabled'; budgetTokens?: number } | { type: 'disabled' };
+  /** Effort level for the query */
+  effort?: 'low' | 'medium' | 'high' | 'max';
+  /** Output format for structured responses */
+  outputFormat?: { type: 'json_schema'; schema: Record<string, unknown> };
+  /** Custom agent definitions */
+  agents?: Record<string, { description: string; prompt?: string; tools?: string[]; disallowedTools?: string[] }>;
+  /** Agent name for the main thread */
+  agent?: string;
+  /** Enable file checkpointing for rewind support */
+  enableFileCheckpointing?: boolean;
+  /** When true, this is an auto-trigger turn (invisible to user) — skip rewind point emission */
+  autoTrigger?: boolean;
 }

@@ -24,6 +24,7 @@ export interface SSECallbacks {
   onToolTimeout: (toolName: string, elapsedSeconds: number) => void;
   onModeChanged: (mode: string) => void;
   onTaskUpdate: (sessionId: string) => void;
+  onRewindPoint: (sdkUserMessageId: string) => void;
   onKeepAlive: () => void;
   onError: (accumulated: string) => void;
 }
@@ -89,7 +90,7 @@ function handleSSEEvent(
       try {
         const statusData = JSON.parse(event.data);
         if (statusData.session_id) {
-          callbacks.onStatus(`Connected (${statusData.model || 'claude'})`);
+          callbacks.onStatus(`Connected (${statusData.requested_model || statusData.model || 'claude'})`);
         } else if (statusData.notification) {
           callbacks.onStatus(statusData.message || statusData.title || undefined);
         } else {
@@ -143,6 +144,18 @@ function handleSSEEvent(
         callbacks.onTaskUpdate(taskData.session_id);
       } catch {
         // skip malformed task_update data
+      }
+      return accumulated;
+    }
+
+    case 'rewind_point': {
+      try {
+        const rpData = JSON.parse(event.data);
+        if (rpData.userMessageId) {
+          callbacks.onRewindPoint(rpData.userMessageId);
+        }
+      } catch {
+        // skip malformed rewind_point data
       }
       return accumulated;
     }
@@ -238,6 +251,7 @@ export function useSSEStream() {
         onToolTimeout: (n, s) => callbacksRef.current?.onToolTimeout(n, s),
         onModeChanged: (m) => callbacksRef.current?.onModeChanged(m),
         onTaskUpdate: (s) => callbacksRef.current?.onTaskUpdate(s),
+        onRewindPoint: (id) => callbacksRef.current?.onRewindPoint(id),
         onKeepAlive: () => callbacksRef.current?.onKeepAlive(),
         onError: (a) => callbacksRef.current?.onError(a),
       };
