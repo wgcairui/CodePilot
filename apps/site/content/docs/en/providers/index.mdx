@@ -1,0 +1,77 @@
+---
+title: Providers
+description: Configure LLM providers to power your CodePilot experience.
+---
+
+CodePilot supports multiple LLM providers. You can configure one or more providers and switch between them at any time.
+
+## Supported Providers
+
+| Provider | Description | Auth Method |
+|----------|-------------|-------------|
+| **Anthropic** | Direct access to Claude models (Opus, Sonnet, Haiku) | API Key |
+| **Custom API (OpenAI-compatible)** | Any OpenAI-compatible endpoint, including local LLMs | API Key + Base URL |
+| **OpenRouter** | Access multiple model providers via OpenRouter | API Key |
+| **AWS Bedrock** | Claude via AWS infrastructure | AWS Credentials |
+| **Google Vertex** | Claude and Gemini via Google Cloud | Service Account |
+| **Google Gemini (Image)** | Gemini image generation | API Key |
+| **LiteLLM** | Unified proxy for 100+ LLM providers | API Key + Base URL |
+
+Additional presets are available for Chinese providers: GLM, Kimi/Moonshot, MiniMax, Volcengine Ark, and Aliyun Bailian.
+
+## Adding a Provider
+
+1. Open **Settings** and go to the **Providers** section
+2. Click **Add Provider**
+3. Select the provider type
+4. Enter your credentials:
+   - For API key providers: paste your API key
+   - For AWS Bedrock: configure your AWS region and credentials
+   - For Google Vertex: configure your project ID and region
+5. Select a default model
+6. Click **Save**
+
+## Switching Providers
+
+You can switch the active provider at any time:
+
+- Use the provider selector in the chat header
+- Each conversation remembers which provider was used
+- Switching providers mid-conversation is supported
+
+## Provider-Specific Features
+
+### Anthropic
+- Supports **extended thinking** mode for complex reasoning
+- Token usage tracking with cost estimates
+- Full Claude Agent SDK integration
+
+### Custom API (OpenAI-compatible)
+- Works with any endpoint that implements the OpenAI chat completions API
+- Use this for local LLMs (Ollama, LM Studio, vLLM, etc.) or third-party proxies
+- Configure via custom base URL
+
+### OpenRouter
+- Access models from Anthropic, OpenAI, Google, Meta, and more through a single API key
+- Automatic model routing and fallback
+
+### AWS Bedrock
+- Uses your existing AWS IAM credentials
+- Supports cross-region inference
+- No separate API key needed if AWS CLI is configured
+
+## Environment Variables
+
+Providers can also be configured via environment variables. CodePilot automatically reads your shell environment:
+
+```bash
+# Anthropic (auto-detected on startup)
+export ANTHROPIC_API_KEY="sk-ant-..."
+
+# AWS Bedrock (uses standard AWS env vars)
+export AWS_ACCESS_KEY_ID="..."
+export AWS_SECRET_ACCESS_KEY="..."
+export AWS_REGION="us-east-1"
+```
+
+CodePilot auto-detects `ANTHROPIC_API_KEY` from your shell environment on startup. For other providers, configure credentials directly in the Providers settings UI. If you update environment variables, restart CodePilot to pick up the changes.

@@ -1,0 +1,54 @@
+---
+title: Message Bridge
+description: Bridge Claude conversations to messaging platforms.
+---
+
+CodePilot's Message Bridge lets you interact with Claude from external messaging platforms. Start a conversation on your desktop, then continue it from your phone via Discord, Telegram, Feishu (Lark), or QQ.
+
+## Supported Platforms
+
+| Platform | Features |
+|----------|----------|
+| **Discord** | Full message bridge with bot integration |
+| **Telegram** | Direct message bridge via bot |
+| **Feishu/Lark** | Enterprise messaging bridge |
+| **QQ** | Bridge via QQ bot platform |
+
+## Setup
+
+### Discord
+
+1. Open **Bridge** from the sidebar, or go to **Settings** and configure the Discord bridge
+2. Create a Discord bot at [discord.com/developers](https://discord.com/developers/applications)
+3. Copy the bot token and paste it into CodePilot
+4. Invite the bot to your Discord server
+5. Specify the channel ID where the bridge should operate
+6. Click **Enable**
+
+### Telegram
+
+1. Open **Bridge** from the sidebar, or go to **Settings** and configure the Telegram bridge
+2. Create a bot via [@BotFather](https://t.me/BotFather) on Telegram
+3. Copy the bot token and paste it into CodePilot
+4. Click **Enable**
+5. Send a message to your bot to start bridging
+
+### Feishu/Lark
+
+1. Open **Bridge** from the sidebar, or go to **Settings** and configure the Feishu bridge
+2. Create an app in the [Feishu Open Platform](https://open.feishu.cn)
+3. Configure the app credentials (App ID and App Secret)
+4. Set up event subscriptions
+5. Click **Enable**
+
+## How It Works
+
+1. **Desktop to Mobile**: Messages you send in CodePilot are forwarded to the configured platform
+2. **Mobile to Desktop**: Messages from the platform are sent to Claude, and responses are forwarded back
+3. **Background Mode**: CodePilot can run in system tray mode, keeping the bridge active even when the window is closed
+
+## Bridge Modes
+
+- **Interactive Mode** — Full bidirectional messaging
+- **System Tray Mode** — Minimize to tray, bridge stays active in background
+- **Notification Only** — Only receive notifications, no message forwarding

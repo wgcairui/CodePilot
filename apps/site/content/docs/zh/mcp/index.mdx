@@ -1,0 +1,57 @@
+---
+title: MCP 插件
+description: 通过 Model Context Protocol 插件扩展 CodePilot 功能。
+---
+
+[Model Context Protocol (MCP)](https://modelcontextprotocol.io) 是一个用于连接 AI 助手与外部工具和数据源的开放标准。CodePilot 内置了对 MCP 服务器的支持。
+
+## 什么是 MCP 插件？
+
+MCP 插件让 Claude 能够使用超出默认能力的额外工具：
+
+- **文件系统工具** — 读写文件、搜索目录
+- **数据库访问** — 直接查询数据库
+- **API 集成** — 连接外部服务（GitHub、Jira、Slack 等）
+- **开发工具** — 运行测试、代码检查、管理依赖
+- **自定义工具** — 为任何目的构建你自己的工具
+
+## 管理插件
+
+### 添加插件
+
+1. 从侧边栏打开 **MCP**
+2. 点击**添加 MCP 服务器**
+3. 配置服务器：
+   - **名称** — 插件的描述性名称
+   - **命令** — 启动 MCP 服务器的命令（如 `npx @modelcontextprotocol/server-filesystem`）
+   - **参数** — 命令行参数
+   - **环境变量** — 所需的环境变量（API 密钥等）
+4. 点击**保存**，插件将被启动
+
+### 插件状态
+
+每个插件会显示连接状态：
+- **已连接** — 服务器正在运行，工具可用
+- **已断开** — 服务器未运行
+- **错误** — 服务器遇到错误（查看日志了解详情）
+
+## 使用插件工具
+
+插件连接后，其工具会自动在对话中对 Claude 可用。Claude 会在与你的请求相关时使用这些工具。
+
+你可以在 **MCP** 页面中查看每个插件提供的可用工具。
+
+## 常用 MCP 服务器
+
+| 服务器 | 用途 |
+|--------|------|
+| `@modelcontextprotocol/server-filesystem` | 文件系统访问 |
+| `@modelcontextprotocol/server-github` | GitHub 集成 |
+| `@modelcontextprotocol/server-slack` | Slack 集成 |
+| `@anthropic-ai/mcp-server-fetch` | 网页抓取 |
+
+## 故障排除
+
+- **插件无法连接**：检查命令是否正确，所需的 npm 包是否已安装
+- **工具未出现**：尝试断开并重新连接插件
+- **权限错误**：确保 MCP 服务器有权访问所需资源

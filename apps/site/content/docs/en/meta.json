@@ -1,0 +1,14 @@
+{
+  "title": "Documentation",
+  "pages": [
+    "index",
+    "installation",
+    "---Guides---",
+    "providers",
+    "mcp",
+    "bridge",
+    "assistant-workspace",
+    "---Help---",
+    "faq"
+  ]
+}

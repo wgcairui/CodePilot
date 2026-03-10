@@ -1,0 +1,61 @@
+---
+title: 安装指南
+description: 如何在你的系统上安装和配置 CodePilot。
+---
+
+## 系统要求
+
+- **macOS** 12+（Apple Silicon 或 Intel）
+- **Windows** 10+（64 位）
+- **Node.js** 18 或更高版本
+- **Claude Code CLI**（如未安装会自动安装）
+
+## 下载
+
+<DownloadButton label="下载最新版本" />
+
+从 [GitHub Releases](https://github.com/op7418/CodePilot/releases) 下载适合你平台的最新版本。
+
+| 平台 | 格式 | 架构 |
+|------|------|------|
+| macOS | DMG | arm64 (Apple Silicon) + x64 (Intel) |
+| Windows | NSIS 安装包 | x64 |
+
+## 安装步骤
+
+### macOS
+
+1. 下载对应架构的 `.dmg` 文件
+2. 打开 DMG，将 CodePilot 拖到应用程序文件夹
+3. 从应用程序中启动 CodePilot
+4. 首次启动时，macOS 可能会提示确认打开来自未识别开发者的应用 — 前往**系统设置 > 隐私与安全性**，点击"仍要打开"
+
+### Windows
+
+1. 下载 `.exe` 安装程序
+2. 运行安装程序并按提示操作
+3. CodePilot 将出现在开始菜单中
+
+## 首次启动
+
+首次启动时，CodePilot 会：
+
+1. **检查 Node.js** — 如未找到，会提供自动安装
+2. **检查 Claude Code CLI** — 如未找到，会通过 npm 安装
+3. **打开设置向导** — 配置 API 提供商和偏好设置
+
+## 配置 API 提供商
+
+CodePilot 至少需要一个 API 提供商才能工作。前往**设置 > 提供商**添加：
+
+- **Anthropic** — 直接访问 Claude 模型
+- **Custom API (OpenAI 兼容)** — 任何 OpenAI 兼容端点，包括本地 LLM
+- **OpenRouter** — 通过 OpenRouter 访问多个模型提供商
+- **AWS Bedrock** — 通过 AWS 使用 Claude
+- **Google Vertex** — 通过 Google Cloud 使用 Claude/Gemini
+
+输入 API 密钥并选择默认模型。你可以配置多个提供商并在它们之间切换。
+
+## 更新
+
+CodePilot 内置自动更新功能。有新版本可用时，你会在应用中看到通知。也可以在**设置**的**通用**部分手动检查更新。

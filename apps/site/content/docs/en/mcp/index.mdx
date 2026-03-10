@@ -1,0 +1,57 @@
+---
+title: MCP
+description: Extend CodePilot with Model Context Protocol servers.
+---
+
+The [Model Context Protocol (MCP)](https://modelcontextprotocol.io) is an open standard for connecting AI assistants to external tools and data sources. CodePilot has built-in support for MCP servers.
+
+## What is MCP?
+
+MCP servers give Claude access to additional tools beyond its default capabilities:
+
+- **File system tools** — Read/write files, search directories
+- **Database access** — Query databases directly
+- **API integrations** — Connect to external services (GitHub, Jira, Slack, etc.)
+- **Development tools** — Run tests, lint code, manage dependencies
+- **Custom tools** — Build your own tools for any purpose
+
+## Managing MCP Servers
+
+### Adding an MCP Server
+
+1. Open **MCP** from the sidebar
+2. Click **Add MCP Server**
+3. Configure the server:
+   - **Name** — A descriptive name for the server
+   - **Command** — The command to start the MCP server (e.g., `npx @modelcontextprotocol/server-filesystem`)
+   - **Arguments** — Command-line arguments
+   - **Environment Variables** — Any required env vars (API keys, etc.)
+4. Click **Save** and the server will be started
+
+### Server Status
+
+Each MCP server shows its connection status:
+- **Connected** — Server is running and tools are available
+- **Disconnected** — Server is not running
+- **Error** — Server encountered an error (check logs for details)
+
+## Using MCP Tools
+
+Once an MCP server is connected, its tools automatically become available to Claude in your conversations. Claude will use these tools when relevant to your request.
+
+You can see which tools are available from each server on the **MCP** page by expanding the server details.
+
+## Popular MCP Servers
+
+| Server | Purpose |
+|--------|---------|
+| `@modelcontextprotocol/server-filesystem` | File system access |
+| `@modelcontextprotocol/server-github` | GitHub integration |
+| `@modelcontextprotocol/server-slack` | Slack integration |
+| `@anthropic-ai/mcp-server-fetch` | Web fetching |
+
+## Troubleshooting
+
+- **Server won't connect**: Check that the command is correct and the required npm package is installed
+- **Tools not appearing**: Try disconnecting and reconnecting the server
+- **Permission errors**: Ensure the MCP server has access to the resources it needs

@@ -14,6 +14,9 @@ const eslintConfig = defineConfig([
     "release/**",
     "dist-electron/**",
     "next-env.d.ts",
+    // apps/site generated artifacts
+    "apps/site/.next/**",
+    "apps/site/.source/**",
   ]),
 ]);
 

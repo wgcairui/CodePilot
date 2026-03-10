@@ -1,0 +1,54 @@
+---
+title: 消息桥接
+description: 将 Claude 对话桥接到消息平台。
+---
+
+CodePilot 的消息桥接功能让你可以从外部消息平台与 Claude 交互。在桌面上开始对话，然后通过 Discord、Telegram、飞书或 QQ 在手机上继续。
+
+## 支持的平台
+
+| 平台 | 功能 |
+|------|------|
+| **Discord** | 完整的消息桥接，支持 Bot 集成 |
+| **Telegram** | 通过 Bot 进行直接消息桥接 |
+| **飞书/Lark** | 企业消息桥接 |
+| **QQ** | 通过 QQ Bot 平台桥接 |
+
+## 设置
+
+### Discord
+
+1. 从侧边栏打开 **Bridge**
+2. 在 [discord.com/developers](https://discord.com/developers/applications) 创建 Discord Bot
+3. 复制 Bot Token 并粘贴到 CodePilot
+4. 将 Bot 邀请到你的 Discord 服务器
+5. 指定桥接操作的频道 ID
+6. 点击**启用**
+
+### Telegram
+
+1. 从侧边栏打开 **Bridge**
+2. 在 Telegram 上通过 [@BotFather](https://t.me/BotFather) 创建 Bot
+3. 复制 Bot Token 并粘贴到 CodePilot
+4. 点击**启用**
+5. 向你的 Bot 发送消息开始桥接
+
+### 飞书/Lark
+
+1. 从侧边栏打开 **Bridge**
+2. 在[飞书开放平台](https://open.feishu.cn)创建应用
+3. 配置应用凭证（App ID 和 App Secret）
+4. 设置事件订阅
+5. 点击**启用**
+
+## 工作原理
+
+1. **桌面到手机**：你在 CodePilot 中发送的消息会转发到配置的平台
+2. **手机到桌面**：来自平台的消息会发送给 Claude，回复会转发回去
+3. **后台模式**：CodePilot 可以在系统托盘模式下运行，即使窗口关闭也能保持桥接活跃
+
+## 桥接模式
+
+- **交互模式** — 完整的双向消息传递
+- **系统托盘模式** — 最小化到托盘，桥接保持活跃
+- **仅通知** — 只接收通知，不转发消息

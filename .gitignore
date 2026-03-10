@@ -53,3 +53,8 @@ next-env.d.ts
 
 # user uploads (runtime data)
 .codepilot-uploads/
+
+# monorepo: site app build artifacts
+apps/site/.next/
+apps/site/.source/
+apps/site/node_modules/

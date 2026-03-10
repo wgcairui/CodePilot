@@ -45,6 +45,7 @@
 | 文件 | 主题 | 状态 |
 |------|------|------|
 | active/context-storage-migration.md | 上下文共享与存储迁移 | Phase 0 部分完成，Phase 1-3 待开始 |
+| active/site-and-docs.md | 官网 + 文档站（apps/site） | Phase 0-1 进行中 |
 
 ### Completed
 

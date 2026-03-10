@@ -1,0 +1,47 @@
+---
+title: Assistant Workspace
+description: Inspect and manage Claude's working environment.
+---
+
+The Assistant Workspace gives you visibility into what Claude is doing during a conversation. It shows file changes, tool usage, and the current state of Claude's working context.
+
+## Features
+
+### File Inspector
+
+View the files that Claude has read or modified during the conversation:
+
+- **File tree** — Browse the project directory structure
+- **Diff view** — See exactly what changes Claude made to each file
+- **File preview** — Preview files with syntax highlighting
+
+### Tool Activity
+
+Monitor Claude's tool usage in real time:
+
+- See which tools Claude is calling and why
+- View tool input/output for debugging
+- Track the sequence of operations
+
+### Context Usage
+
+Track how much of Claude's context window is being used:
+
+- **Token count** — Current tokens used vs. available
+- **Usage breakdown** — How tokens are distributed across messages, tools, and system context
+- **Cost estimate** — Approximate cost based on the active provider's pricing
+
+## Opening the Workspace
+
+The workspace can be configured from:
+
+- Go to **Settings** and open the **Assistant** section (`/settings#assistant`)
+
+The workspace panel appears as a resizable side panel alongside the chat, and can be toggled from the chat header.
+
+## Use Cases
+
+- **Code Review** — Review all file changes Claude has made before committing
+- **Debugging** — Inspect tool calls when something isn't working as expected
+- **Learning** — Understand how Claude approaches problems by watching its tool usage
+- **Cost Management** — Monitor token usage to stay within budget

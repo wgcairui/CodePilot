@@ -1,0 +1,77 @@
+---
+title: 提供商配置
+description: 配置 LLM 提供商以驱动你的 CodePilot 体验。
+---
+
+CodePilot 支持多个 LLM 提供商。你可以配置一个或多个提供商，随时在它们之间切换。
+
+## 支持的提供商
+
+| 提供商 | 说明 | 认证方式 |
+|--------|------|----------|
+| **Anthropic** | 直接访问 Claude 模型（Opus、Sonnet、Haiku） | API 密钥 |
+| **Custom API (OpenAI 兼容)** | 任何 OpenAI 兼容端点，包括本地 LLM | API 密钥 + Base URL |
+| **OpenRouter** | 通过 OpenRouter 访问多个模型提供商 | API 密钥 |
+| **AWS Bedrock** | 通过 AWS 基础设施使用 Claude | AWS 凭证 |
+| **Google Vertex** | 通过 Google Cloud 使用 Claude 和 Gemini | 服务账号 |
+| **Google Gemini (Image)** | Gemini 图片生成 | API 密钥 |
+| **LiteLLM** | 统一代理，支持 100+ LLM 提供商 | API 密钥 + Base URL |
+
+另外还提供中国提供商预设：GLM、Kimi/Moonshot、MiniMax、火山引擎 Ark、阿里云百炼。
+
+## 添加提供商
+
+1. 打开**设置 > 提供商**
+2. 点击**添加提供商**
+3. 选择提供商类型
+4. 输入凭证：
+   - API 密钥类型：粘贴你的 API 密钥
+   - AWS Bedrock：配置 AWS 区域和凭证
+   - Google Vertex：配置项目 ID 和区域
+5. 选择默认模型
+6. 点击**保存**
+
+## 切换提供商
+
+你可以随时切换活跃的提供商：
+
+- 使用聊天头部的提供商选择器
+- 每个对话会记住使用的提供商
+- 支持在对话中途切换提供商
+
+## 提供商特定功能
+
+### Anthropic
+- 支持**扩展思考**模式，用于复杂推理
+- 带成本估算的 token 使用追踪
+- 完整的 Claude Agent SDK 集成
+
+### Custom API (OpenAI 兼容)
+- 支持任何实现 OpenAI Chat Completions API 的端点
+- 可用于本地 LLM（Ollama、LM Studio、vLLM 等）或第三方代理
+- 通过自定义 Base URL 配置
+
+### OpenRouter
+- 通过单个 API 密钥访问 Anthropic、OpenAI、Google、Meta 等多家提供商的模型
+- 自动模型路由和故障转移
+
+### AWS Bedrock
+- 使用现有的 AWS IAM 凭证
+- 支持跨区域推理
+- 如果已配置 AWS CLI，无需单独的 API 密钥
+
+## 环境变量
+
+提供商也可以通过环境变量配置。CodePilot 会自动读取你的 shell 环境：
+
+```bash
+# Anthropic（启动时自动检测）
+export ANTHROPIC_API_KEY="sk-ant-..."
+
+# AWS Bedrock（使用标准 AWS 环境变量）
+export AWS_ACCESS_KEY_ID="..."
+export AWS_SECRET_ACCESS_KEY="..."
+export AWS_REGION="us-east-1"
+```
+
+CodePilot 启动时会自动检测 `ANTHROPIC_API_KEY` 环境变量。其他提供商请在设置的提供商界面中直接配置凭证。更新环境变量后需要重启 CodePilot 才能生效。

@@ -1,0 +1,70 @@
+---
+title: 常见问题
+description: 关于 CodePilot 的常见问题解答。
+---
+
+## 一般问题
+
+### CodePilot 是什么？
+
+CodePilot 是 Claude Code 的原生桌面 GUI 客户端。它为 Claude Code CLI 提供图形界面，附带多提供商支持、插件系统、消息桥接和主题自定义等额外功能。
+
+### CodePilot 免费吗？
+
+CodePilot 是开源且免费使用的。你需要自己的 API 密钥（来自 Anthropic、OpenAI、Google、AWS Bedrock 等支持的提供商）。
+
+### 支持哪些平台？
+
+CodePilot 支持 macOS（Apple Silicon 和 Intel）和 Windows。Linux 支持正在计划中。
+
+## 设置
+
+### 出现"未找到 Node.js"错误
+
+CodePilot 需要 Node.js 18 或更高版本。设置向导会提供自动安装，你也可以从 [nodejs.org](https://nodejs.org) 手动安装。
+
+### 如何获取 API 密钥？
+
+- **Anthropic**：在 [console.anthropic.com](https://console.anthropic.com) 注册并创建 API 密钥
+- **OpenAI**：在 [platform.openai.com](https://platform.openai.com) 注册并创建 API 密钥
+- **Google AI**：从 [aistudio.google.com](https://aistudio.google.com) 获取密钥
+
+### 可以使用本地 LLM 吗？
+
+可以，如果它提供 OpenAI 兼容的 API 端点。将其配置为 OpenAI 提供商，使用本地服务器的 URL 即可。
+
+## 使用
+
+### 如何切换提供商？
+
+使用聊天头部的提供商选择器。每个对话会记住其提供商，你可以在对话中途切换。
+
+### 如何使用 MCP 插件？
+
+从侧边栏打开 **MCP** 添加 MCP 服务器。连接后，其工具会自动对 Claude 可用。
+
+### 可以在手机上使用 CodePilot 吗？
+
+不能直接使用，但你可以使用[消息桥接](/zh/docs/bridge)将对话桥接到 Discord、Telegram、飞书或 QQ，在手机上交互。
+
+## 故障排除
+
+### 应用无法启动
+
+1. 确保已安装 Node.js 18+
+2. 尝试删除应用数据目录并重新启动
+3. 检查应用数据目录中的日志文件
+
+### Claude 没有响应
+
+1. 检查 API 密钥是否有效且有足够额度
+2. 验证网络连接
+3. 尝试切换到其他提供商以定位问题
+4. 检查侧边栏 **MCP** 页面是否有 MCP 服务器错误
+
+### 如何报告 Bug？
+
+在 [GitHub](https://github.com/op7418/CodePilot/issues) 上创建 issue，包含：
+- 你的操作系统和 CodePilot 版本
+- 复现步骤
+- 日志中的相关错误信息

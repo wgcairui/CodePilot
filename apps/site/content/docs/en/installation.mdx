@@ -1,0 +1,61 @@
+---
+title: Installation
+description: How to install and set up CodePilot on your system.
+---
+
+## System Requirements
+
+- **macOS** 12+ (Apple Silicon or Intel)
+- **Windows** 10+ (64-bit)
+- **Node.js** 18 or later
+- **Claude Code CLI** (will be installed automatically if not present)
+
+## Download
+
+<DownloadButton label="Download Latest Release" />
+
+Download the latest release for your platform from [GitHub Releases](https://github.com/op7418/CodePilot/releases).
+
+| Platform | Format | Architecture |
+|----------|--------|-------------|
+| macOS | DMG | arm64 (Apple Silicon) + x64 (Intel) |
+| Windows | NSIS Installer | x64 |
+
+## Installation Steps
+
+### macOS
+
+1. Download the `.dmg` file for your architecture
+2. Open the DMG and drag CodePilot to your Applications folder
+3. Launch CodePilot from Applications
+4. On first launch, macOS may ask you to confirm opening an app from an unidentified developer — go to **System Settings > Privacy & Security** and click "Open Anyway"
+
+### Windows
+
+1. Download the `.exe` installer
+2. Run the installer and follow the prompts
+3. CodePilot will be available in your Start menu
+
+## First Launch
+
+On first launch, CodePilot will:
+
+1. **Check for Node.js** — if not found, it will offer to install it automatically
+2. **Check for Claude Code CLI** — if not found, it will install it via npm
+3. **Open the Setup Wizard** — configure your API provider and preferences
+
+## Configuring an API Provider
+
+CodePilot needs at least one API provider to function. Go to **Settings** and open the **Providers** section to add one:
+
+- **Anthropic** — Direct API access to Claude models
+- **Custom API (OpenAI-compatible)** — Any OpenAI-compatible endpoint, including local LLMs
+- **OpenRouter** — Access multiple providers via OpenRouter
+- **AWS Bedrock** — Claude via AWS
+- **Google Vertex** — Claude/Gemini via Google Cloud
+
+Enter your API key and select a default model. You can configure multiple providers and switch between them.
+
+## Updating
+
+CodePilot includes an auto-updater. When a new version is available, you'll see a notification in the app. You can also manually check for updates in the **General** section of **Settings**.

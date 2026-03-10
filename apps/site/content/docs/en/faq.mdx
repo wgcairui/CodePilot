@@ -1,0 +1,70 @@
+---
+title: FAQ
+description: Frequently asked questions about CodePilot.
+---
+
+## General
+
+### What is CodePilot?
+
+CodePilot is a native desktop GUI client for Claude Code. It provides a graphical interface for the Claude Code CLI, with additional features like multi-provider support, a plugin system, message bridging, and theme customization.
+
+### Is CodePilot free?
+
+CodePilot is open source and free to use. You need your own API key from a supported provider (Anthropic, OpenAI, Google, AWS Bedrock, etc.) to use it.
+
+### What platforms are supported?
+
+CodePilot supports macOS (Apple Silicon and Intel) and Windows. Linux support is planned.
+
+## Setup
+
+### I get a "Node.js not found" error
+
+CodePilot requires Node.js 18 or later. The setup wizard will offer to install it for you, or you can install it manually from [nodejs.org](https://nodejs.org).
+
+### How do I get an API key?
+
+- **Anthropic**: Sign up at [console.anthropic.com](https://console.anthropic.com) and create an API key
+- **OpenAI**: Sign up at [platform.openai.com](https://platform.openai.com) and create an API key
+- **Google AI**: Get a key from [aistudio.google.com](https://aistudio.google.com)
+
+### Can I use a local LLM?
+
+Yes, if it provides an OpenAI-compatible API endpoint. Configure it as an OpenAI provider with your local server's URL.
+
+## Usage
+
+### How do I switch between providers?
+
+Use the provider selector in the chat header. Each conversation remembers its provider, and you can switch mid-conversation.
+
+### How do I use MCP plugins?
+
+Open **MCP** from the sidebar to add MCP servers. Once connected, their tools are automatically available to Claude.
+
+### Can I use CodePilot on my phone?
+
+Not directly, but you can use the [Message Bridge](/docs/bridge) to bridge conversations to Discord, Telegram, Feishu, or QQ and interact from your phone.
+
+## Troubleshooting
+
+### The app won't start
+
+1. Make sure Node.js 18+ is installed
+2. Try deleting the app data directory and relaunching
+3. Check the logs in the app data directory for error messages
+
+### Claude isn't responding
+
+1. Check that your API key is valid and has sufficient credits
+2. Verify your internet connection
+3. Try switching to a different provider to isolate the issue
+4. Check the **MCP** page in the sidebar for any MCP server errors that might be blocking
+
+### How do I report a bug?
+
+Open an issue on [GitHub](https://github.com/op7418/CodePilot/issues) with:
+- Your OS and CodePilot version
+- Steps to reproduce the issue
+- Any relevant error messages from the logs
