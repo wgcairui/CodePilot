@@ -582,58 +582,166 @@ app.whenReady().then(async () => {
   ipcMain.handle('install:check-prerequisites', async () => {
     const expandedPath = getExpandedShellPath();
     const execEnv = { ...sanitizedProcessEnv(), ...userShellEnv, PATH: expandedPath };
-    const execOpts = { timeout: 5000, encoding: 'utf-8' as const, env: execEnv };
 
-    let hasNode = false;
-    let nodeVersion: string | undefined;
+    // Candidate paths — native first, then bun, then homebrew, then npm
+    const home = os.homedir();
+    const candidatePaths = process.platform === 'win32'
+      ? [
+          path.join(home, '.local', 'bin', 'claude.exe'),
+          path.join(home, '.local', 'bin', 'claude.cmd'),
+          path.join(home, '.claude', 'bin', 'claude.exe'),
+          path.join(home, '.claude', 'bin', 'claude.cmd'),
+          path.join(home, '.bun', 'bin', 'claude.exe'),
+          path.join(home, '.bun', 'bin', 'claude.cmd'),
+          path.join(process.env.APPDATA || '', 'npm', 'claude.cmd'),
+          path.join(process.env.LOCALAPPDATA || '', 'npm', 'claude.cmd'),
+        ].filter(p => p && !p.startsWith(path.sep))
+      : [
+          path.join(home, '.local', 'bin', 'claude'),
+          path.join(home, '.claude', 'bin', 'claude'),
+          path.join(home, '.bun', 'bin', 'claude'),
+          '/opt/homebrew/bin/claude',
+          '/usr/local/bin/claude',
+          path.join(home, '.npm-global', 'bin', 'claude'),
+        ];
+
+    function classifyPath(p: string): 'native' | 'homebrew' | 'npm' | 'bun' | 'unknown' {
+      const n = p.replace(/\\/g, '/');
+      if (n.includes('/.local/bin/') || n.includes('/.claude/bin/')) return 'native';
+      if (n.includes('/.bun/bin/') || n.includes('/.bun/install/')) return 'bun';
+      if (n.includes('/homebrew/') || n.includes('/Cellar/')) return 'homebrew';
+      if (n.includes('/npm')) return 'npm';
+      if (n === '/usr/local/bin/claude') {
+        try {
+          const real = fs.realpathSync(p);
+          if (real.includes('node_modules')) return 'npm';
+          if (real.includes('homebrew') || real.includes('Cellar')) return 'homebrew';
+          if (real.includes('.bun')) return 'bun';
+        } catch { /* ignore */ }
+        return 'unknown';
+      }
+      return 'unknown';
+    }
+
+    interface Detection { path: string; version: string | null; type: string }
+    const allInstalls: Detection[] = [];
+    const seenReal = new Set<string>();
+
+    for (const p of candidatePaths) {
+      try {
+        let realPath: string;
+        try { realPath = fs.realpathSync(p); } catch { realPath = p; }
+        if (seenReal.has(realPath)) continue;
+
+        const isWin = process.platform === 'win32';
+        const shell = isWin && /\.(cmd|bat)$/i.test(p);
+        const result = execFileSync(p, ['--version'], {
+          timeout: 5000, encoding: 'utf-8', env: execEnv, shell, stdio: 'pipe',
+        });
+        seenReal.add(realPath);
+        allInstalls.push({ path: p, version: result.trim() || null, type: classifyPath(p) });
+      } catch {
+        // not at this path
+      }
+    }
+
+    // Also scan PATH via which/where to catch bun, custom, or other non-standard installs
     try {
-      const result = execFileSync('node', ['--version'], execOpts);
-      nodeVersion = result.trim();
-      hasNode = true;
+      const isWinPlatform = process.platform === 'win32';
+      const cmd = isWinPlatform ? 'where' : '/usr/bin/which';
+      const args = isWinPlatform ? ['claude'] : ['-a', 'claude']; // -a = show ALL matches
+      const whichResult = execFileSync(cmd, args, {
+        timeout: 3000, encoding: 'utf-8', env: execEnv,
+        shell: isWinPlatform, stdio: 'pipe',
+      });
+      for (const line of whichResult.trim().split(/\r?\n/)) {
+        const candidate = line.trim();
+        if (!candidate) continue;
+        try {
+          let realPath: string;
+          try { realPath = fs.realpathSync(candidate); } catch { realPath = candidate; }
+          if (seenReal.has(realPath)) continue;
+
+          const shell = isWinPlatform && /\.(cmd|bat)$/i.test(candidate);
+          const result = execFileSync(candidate, ['--version'], {
+            timeout: 5000, encoding: 'utf-8', env: execEnv, shell, stdio: 'pipe',
+          });
+          seenReal.add(realPath);
+          allInstalls.push({ path: candidate, version: result.trim() || null, type: classifyPath(candidate) });
+        } catch {
+          // invalid binary at this path
+        }
+      }
     } catch {
-      // node not found
+      // which/where failed
     }
 
-    let hasClaude = false;
-    let claudeVersion: string | undefined;
-    try {
-      const claudeOpts = process.platform === 'win32'
-        ? { ...execOpts, shell: true }
-        : execOpts;
-      const result = execFileSync('claude', ['--version'], claudeOpts);
-      claudeVersion = result.trim();
-      hasClaude = true;
-    } catch {
-      // claude not found
+    const primary = allInstalls[0];
+    const hasClaude = !!primary;
+
+    // On Windows, check for Git Bash (bash.exe) — this is what the SDK actually uses at runtime.
+    // Must match the detection strategy in platform.ts:findGitBash() to avoid false negatives.
+    let hasGit = true; // default true for non-Windows
+    if (process.platform === 'win32') {
+      hasGit = false;
+      // 1. User-specified env var
+      const envBash = process.env.CLAUDE_CODE_GIT_BASH_PATH || userShellEnv.CLAUDE_CODE_GIT_BASH_PATH;
+      if (envBash && fs.existsSync(envBash)) {
+        hasGit = true;
+      }
+      // 2. Common installation paths
+      if (!hasGit) {
+        const commonPaths = [
+          'C:\\Program Files\\Git\\bin\\bash.exe',
+          'C:\\Program Files (x86)\\Git\\bin\\bash.exe',
+        ];
+        if (commonPaths.some(p => fs.existsSync(p))) {
+          hasGit = true;
+        }
+      }
+      // 3. Derive from `where git`
+      if (!hasGit) {
+        try {
+          const whereResult = execFileSync('where', ['git'], {
+            timeout: 3000, encoding: 'utf-8', shell: true, stdio: 'pipe',
+          });
+          for (const line of whereResult.trim().split(/\r?\n/)) {
+            const gitExe = line.trim();
+            if (!gitExe) continue;
+            const gitDir = path.dirname(path.dirname(gitExe));
+            const bashPath = path.join(gitDir, 'bin', 'bash.exe');
+            if (fs.existsSync(bashPath)) {
+              hasGit = true;
+              break;
+            }
+          }
+        } catch {
+          // where git failed
+        }
+      }
     }
 
-    // Check Homebrew on macOS
-    let hasHomebrew = false;
-    if (process.platform === 'darwin') {
-      const brewPaths = ['/opt/homebrew/bin/brew', '/usr/local/bin/brew'];
-      hasHomebrew = brewPaths.some(p => fs.existsSync(p));
-    }
-
-    return { hasNode, nodeVersion, hasClaude, claudeVersion, hasHomebrew, platform: process.platform };
+    return {
+      hasClaude,
+      claudeVersion: primary?.version,
+      claudePath: primary?.path,
+      claudeInstallType: primary?.type,
+      otherInstalls: allInstalls.slice(1),
+      hasGit,
+      platform: process.platform,
+    };
   });
 
-  ipcMain.handle('install:start', (_event: Electron.IpcMainInvokeEvent, options?: { includeNode?: boolean }) => {
+  ipcMain.handle('install:start', () => {
     if (installState.status === 'running') {
       throw new Error('Installation is already running');
     }
 
-    const needsNode = options?.includeNode === true;
-
-    // Reset state
-    const steps: InstallStep[] = [];
-    if (needsNode) {
-      steps.push({ id: 'install-node', label: 'Installing Node.js', status: 'pending' });
-    }
-    steps.push(
-      { id: 'check-node', label: 'Checking Node.js', status: 'pending' },
-      { id: 'install-claude', label: 'Installing Claude Code', status: 'pending' },
+    // Reset state — native installer needs no Node.js prerequisite
+    const steps: InstallStep[] = [
+      { id: 'install-claude', label: 'Installing Claude Code (native)', status: 'pending' },
       { id: 'verify', label: 'Verifying installation', status: 'pending' },
-    );
+    ];
 
     installState = {
       status: 'running',
@@ -643,6 +751,7 @@ app.whenReady().then(async () => {
     };
 
     const expandedPath = getExpandedShellPath();
+    const home = os.homedir();
     const execEnv: Record<string, string> = {
       ...userShellEnv,
       ...sanitizedProcessEnv(),
@@ -672,173 +781,137 @@ app.whenReady().then(async () => {
     // Run the installation sequence asynchronously
     (async () => {
       try {
-        // Step 0 (optional): Install Node.js via package manager
-        if (needsNode) {
-          setStep('install-node', 'running');
+        const isWin = process.platform === 'win32';
 
-          const nodeInstalled = await new Promise<boolean>((resolve) => {
-            const isWin = process.platform === 'win32';
-            const isMac = process.platform === 'darwin';
-            let cmd: string;
-            let args: string[];
+        // Step 1: Install Claude Code via native installer
+        setStep('install-claude', 'running');
 
-            if (isMac) {
-              // macOS: Homebrew only — UI should guide the user to install Homebrew first
-              const brewPaths = ['/opt/homebrew/bin/brew', '/usr/local/bin/brew'];
-              const brewPath = brewPaths.find(p => fs.existsSync(p));
-              if (brewPath) {
-                cmd = brewPath;
-                args = ['install', 'node'];
-                addLog(`Running: ${brewPath} install node`);
-              } else {
-                addLog('Homebrew is required. Please install Homebrew first and retry.');
+        if (isWin) {
+          // Windows: download and run install.cmd
+          addLog('Downloading native installer for Windows...');
+
+          const installSuccess = await new Promise<boolean>((resolve) => {
+            // Download install.cmd to temp, then execute it
+            const tmpDir = os.tmpdir();
+            const installCmd = path.join(tmpDir, 'claude-install.cmd');
+
+            const downloadChild = spawn('curl', ['-fsSL', 'https://claude.ai/install.cmd', '-o', installCmd], {
+              env: execEnv,
+              shell: true,
+              stdio: ['ignore', 'pipe', 'pipe'],
+            });
+            installProcess = downloadChild;
+
+            downloadChild.stderr?.on('data', (data: Buffer) => {
+              for (const line of data.toString().split('\n').filter(Boolean)) addLog(line);
+            });
+
+            downloadChild.on('close', (dlCode) => {
+              if (dlCode !== 0) {
+                addLog('Failed to download installer.');
                 resolve(false);
                 return;
               }
-            } else if (isWin) {
-              cmd = 'winget';
-              args = ['install', '-e', '--id', 'OpenJS.NodeJS.LTS', '--accept-source-agreements', '--accept-package-agreements'];
-              addLog('Running: winget install -e --id OpenJS.NodeJS.LTS');
-            } else {
-              // Linux — no universal package manager
-              addLog('Auto-install of Node.js is not supported on this platform.');
-              resolve(false);
-              return;
-            }
 
-            const child = spawn(cmd, args, {
+              addLog('Running installer...');
+              const child = spawn(installCmd, [], {
+                env: execEnv,
+                shell: true,
+                stdio: ['ignore', 'pipe', 'pipe'],
+              });
+              installProcess = child;
+
+              child.stdout?.on('data', (data: Buffer) => {
+                for (const line of data.toString().split('\n').filter(Boolean)) addLog(line);
+              });
+              child.stderr?.on('data', (data: Buffer) => {
+                for (const line of data.toString().split('\n').filter(Boolean)) addLog(line);
+              });
+              child.on('error', (err) => { addLog(`Error: ${err.message}`); resolve(false); });
+              child.on('close', (code) => {
+                installProcess = null;
+                // Clean up temp file
+                try { fs.unlinkSync(installCmd); } catch { /* ignore */ }
+                resolve(code === 0);
+              });
+            });
+
+            downloadChild.on('error', (err) => {
+              addLog(`Download error: ${err.message}`);
+              resolve(false);
+            });
+          });
+
+          if (installState.status === 'cancelled') {
+            setStep('install-claude', 'failed', 'Cancelled');
+            return;
+          }
+          if (!installSuccess) {
+            setStep('install-claude', 'failed', 'Native installer failed. Check logs for details.');
+            installState.status = 'failed';
+            sendProgress();
+            return;
+          }
+        } else {
+          // macOS / Linux: curl | bash
+          addLog('Running: curl -fsSL https://claude.ai/install.sh | bash');
+
+          const installSuccess = await new Promise<boolean>((resolve) => {
+            const userShell = process.env.SHELL || '/bin/bash';
+            const child = spawn(userShell, ['-c', 'curl -fsSL https://claude.ai/install.sh | bash'], {
               env: execEnv,
-              shell: isWin,
               stdio: ['ignore', 'pipe', 'pipe'],
             });
 
             installProcess = child;
 
             child.stdout?.on('data', (data: Buffer) => {
-              for (const line of data.toString().split('\n').filter(Boolean)) {
-                addLog(line);
-              }
+              for (const line of data.toString().split('\n').filter(Boolean)) addLog(line);
             });
             child.stderr?.on('data', (data: Buffer) => {
-              for (const line of data.toString().split('\n').filter(Boolean)) {
-                addLog(line);
-              }
+              for (const line of data.toString().split('\n').filter(Boolean)) addLog(line);
             });
-            child.on('error', (err) => {
-              addLog(`Error: ${err.message}`);
-              resolve(false);
-            });
+            child.on('error', (err) => { addLog(`Error: ${err.message}`); resolve(false); });
             child.on('close', (code) => {
               installProcess = null;
-              resolve(code === 0);
+              if (code === 0) {
+                addLog('Native installer completed successfully.');
+                resolve(true);
+              } else if (installState.status === 'cancelled') {
+                addLog('Installation was cancelled.');
+                resolve(false);
+              } else {
+                addLog(`Installer exited with code ${code}`);
+                resolve(false);
+              }
             });
           });
 
           if (installState.status === 'cancelled') {
-            setStep('install-node', 'failed', 'Cancelled');
+            setStep('install-claude', 'failed', 'Cancelled');
             return;
           }
-
-          if (!nodeInstalled) {
-            setStep('install-node', 'failed', 'Could not auto-install Node.js.');
+          if (!installSuccess) {
+            setStep('install-claude', 'failed', 'Native installer failed. Check logs for details.');
             installState.status = 'failed';
             sendProgress();
             return;
           }
-
-          setStep('install-node', 'success');
-          addLog('Node.js installation completed.');
-        }
-
-        // Step 1: Check node
-        setStep('check-node', 'running');
-        try {
-          const nodeResult = execFileSync('node', ['--version'], {
-            timeout: 5000,
-            encoding: 'utf-8',
-            env: execEnv,
-          });
-          addLog(`Node.js found: ${nodeResult.trim()}`);
-          setStep('check-node', 'success');
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          addLog(`Node.js not found: ${msg}`);
-          setStep('check-node', 'failed', 'Node.js is not installed. Please install Node.js first.');
-          installState.status = 'failed';
-          sendProgress();
-          return;
-        }
-
-        // Step 2: Install Claude Code via npm
-        setStep('install-claude', 'running');
-        addLog('Running: npm install -g @anthropic-ai/claude-code');
-
-        const npmInstallSuccess = await new Promise<boolean>((resolve) => {
-          const isWin = process.platform === 'win32';
-          const npmCmd = isWin ? 'npm.cmd' : 'npm';
-
-          const child = spawn(npmCmd, ['install', '-g', '@anthropic-ai/claude-code'], {
-            env: execEnv,
-            shell: isWin,
-            stdio: ['ignore', 'pipe', 'pipe'],
-          });
-
-          installProcess = child;
-
-          child.stdout?.on('data', (data: Buffer) => {
-            const lines = data.toString().split('\n').filter(Boolean);
-            for (const line of lines) {
-              addLog(line);
-            }
-          });
-
-          child.stderr?.on('data', (data: Buffer) => {
-            const lines = data.toString().split('\n').filter(Boolean);
-            for (const line of lines) {
-              addLog(line);
-            }
-          });
-
-          child.on('error', (err) => {
-            addLog(`npm error: ${err.message}`);
-            resolve(false);
-          });
-
-          child.on('close', (code) => {
-            installProcess = null;
-            if (code === 0) {
-              addLog('npm install completed successfully');
-              resolve(true);
-            } else if (installState.status === 'cancelled') {
-              addLog('Installation was cancelled');
-              resolve(false);
-            } else {
-              addLog(`npm install exited with code ${code}`);
-              resolve(false);
-            }
-          });
-        });
-
-        if (installState.status === 'cancelled') {
-          setStep('install-claude', 'failed', 'Cancelled');
-          return;
-        }
-
-        if (!npmInstallSuccess) {
-          setStep('install-claude', 'failed', 'npm install failed. Check logs for details.');
-          installState.status = 'failed';
-          sendProgress();
-          return;
         }
 
         setStep('install-claude', 'success');
 
-        // Step 3: Verify claude is available
+        // Step 2: Verify claude is available
         setStep('verify', 'running');
+
+        // Native installer puts binary in ~/.local/bin/claude — add to PATH for verification
+        const verifyPath = `${path.join(home, '.local', 'bin')}${path.delimiter}${expandedPath}`;
+        const verifyEnv = { ...execEnv, PATH: verifyPath };
+
         try {
-          const verifyOpts = process.platform === 'win32'
-            ? { timeout: 5000, encoding: 'utf-8' as const, env: execEnv, shell: true }
-            : { timeout: 5000, encoding: 'utf-8' as const, env: execEnv };
+          const verifyOpts = isWin
+            ? { timeout: 5000, encoding: 'utf-8' as const, env: verifyEnv, shell: true, stdio: 'pipe' as const }
+            : { timeout: 5000, encoding: 'utf-8' as const, env: verifyEnv, stdio: 'pipe' as const };
           const claudeResult = execFileSync('claude', ['--version'], verifyOpts);
           addLog(`Claude Code installed: ${claudeResult.trim()}`);
           setStep('verify', 'success');

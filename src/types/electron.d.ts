@@ -3,14 +3,23 @@
  * Exposed via contextBridge.exposeInMainWorld('electronAPI', ...) in electron/preload.ts.
  */
 
+interface ClaudeInstallDetection {
+  path: string;
+  version: string | null;
+  type: 'native' | 'homebrew' | 'npm' | 'bun' | 'unknown';
+}
+
 interface ElectronInstallAPI {
   checkPrerequisites: () => Promise<{
-    hasNode: boolean;
-    nodeVersion?: string;
     hasClaude: boolean;
     claudeVersion?: string;
+    claudePath?: string;
+    claudeInstallType?: 'native' | 'homebrew' | 'npm' | 'bun' | 'unknown';
+    otherInstalls?: ClaudeInstallDetection[];
+    hasGit?: boolean;
+    platform?: string;
   }>;
-  start: (options?: { includeNode?: boolean }) => Promise<void>;
+  start: () => Promise<void>;
   cancel: () => Promise<void>;
   getLogs: () => Promise<string[]>;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any

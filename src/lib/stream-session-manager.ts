@@ -64,6 +64,8 @@ export interface StartStreamParams {
   effort?: string;
   /** SDK thinking config */
   thinking?: { type: string; budgetTokens?: number };
+  /** Enable 1M context window (beta) */
+  context1m?: boolean;
   /** Called when init status event provides metadata (tools, slash_commands, skills) */
   onInitMeta?: (meta: { tools?: unknown; slash_commands?: unknown; skills?: unknown }) => void;
   /** Display-only content for user message (e.g. /skillName instead of expanded prompt) */
@@ -240,6 +242,7 @@ async function runStream(stream: ActiveStream, params: StartStreamParams): Promi
         ...(params.autoTrigger ? { autoTrigger: true } : {}),
         ...(params.effort ? { effort: params.effort } : {}),
         ...(params.thinking ? { thinking: params.thinking } : {}),
+        ...(params.context1m ? { context_1m: true } : {}),
         ...(params.displayOverride ? { displayOverride: params.displayOverride } : {}),
       }),
       signal: stream.abortController.signal,

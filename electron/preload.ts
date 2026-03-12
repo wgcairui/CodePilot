@@ -16,7 +16,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   },
   install: {
     checkPrerequisites: () => ipcRenderer.invoke('install:check-prerequisites'),
-    start: (options?: { includeNode?: boolean }) => ipcRenderer.invoke('install:start', options),
+    start: () => ipcRenderer.invoke('install:start'),
     cancel: () => ipcRenderer.invoke('install:cancel'),
     getLogs: () => ipcRenderer.invoke('install:get-logs'),
     onProgress: (callback: (data: unknown) => void) => {
