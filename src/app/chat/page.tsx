@@ -9,6 +9,11 @@ import { ChatComposerActionBar } from '@/components/chat/ChatComposerActionBar';
 import { ChatPermissionSelector } from '@/components/chat/ChatPermissionSelector';
 import { ImageGenToggle } from '@/components/chat/ImageGenToggle';
 import { PermissionPrompt } from '@/components/chat/PermissionPrompt';
+import { ChatEmptyState } from '@/components/chat/ChatEmptyState';
+import { ErrorBanner } from '@/components/ui/error-banner';
+import { FolderPicker } from '@/components/chat/FolderPicker';
+import { useNativeFolderPicker } from '@/hooks/useNativeFolderPicker';
+import { useTranslation } from '@/hooks/useTranslation';
 import { usePanel } from '@/hooks/usePanel';
 
 interface ToolUseInfo {
@@ -25,13 +30,19 @@ interface ToolResultInfo {
 export default function NewChatPage() {
   const router = useRouter();
   const { setPendingApprovalSessionId } = usePanel();
+  const { t } = useTranslation();
+  const { isElectron, openNativePicker } = useNativeFolderPicker();
   const [messages, setMessages] = useState<Message[]>([]);
   const [streamingContent, setStreamingContent] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [toolUses, setToolUses] = useState<ToolUseInfo[]>([]);
   const [toolResults, setToolResults] = useState<ToolResultInfo[]>([]);
   const [statusText, setStatusText] = useState<string | undefined>();
-  const [workingDir] = useState('');
+  const [workingDir, setWorkingDir] = useState('');
+  const [folderPickerOpen, setFolderPickerOpen] = useState(false);
+  const [errorBanner, setErrorBanner] = useState<{ message: string; description?: string } | null>(null);
+  const [recentProjects, setRecentProjects] = useState<string[]>([]);
+  const [hasProvider, setHasProvider] = useState(true); // assume true until checked
   const [mode] = useState('code');
   const [currentModel, setCurrentModel] = useState('sonnet');
   const [currentProviderId, setCurrentProviderId] = useState('');
@@ -62,6 +73,109 @@ export default function NewChatPage() {
       .catch(() => {});
     return () => controller.abort();
   }, [currentProviderId]);
+
+  // Initialize workingDir from localStorage (or setup default), validating the path exists
+  useEffect(() => {
+    let cancelled = false;
+
+    const validateDir = async (path: string): Promise<boolean> => {
+      try {
+        const res = await fetch(`/api/files/browse?dir=${encodeURIComponent(path)}`);
+        return res.ok;
+      } catch {
+        return false;
+      }
+    };
+
+    const tryFallbackToDefault = async () => {
+      try {
+        const res = await fetch('/api/setup');
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        if (cancelled || !data?.defaultProject) return;
+        if (await validateDir(data.defaultProject) && !cancelled) {
+          setWorkingDir(data.defaultProject);
+          localStorage.setItem('codepilot:last-working-directory', data.defaultProject);
+        }
+      } catch { /* ignore */ }
+    };
+
+    const init = async () => {
+      const saved = localStorage.getItem('codepilot:last-working-directory');
+      if (saved) {
+        if (await validateDir(saved) && !cancelled) {
+          setWorkingDir(saved);
+        } else if (!cancelled) {
+          // Stale — clear and try setup default
+          localStorage.removeItem('codepilot:last-working-directory');
+          await tryFallbackToDefault();
+        }
+      } else {
+        await tryFallbackToDefault();
+      }
+    };
+
+    init();
+
+    const handler = (e: Event) => {
+      const path = (e as CustomEvent).detail?.path;
+      if (path) setWorkingDir(path);
+    };
+    window.addEventListener('project-directory-changed', handler);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('project-directory-changed', handler);
+    };
+  }, []);
+
+  // Load recent projects for empty state
+  useEffect(() => {
+    fetch('/api/setup/recent-projects')
+      .then(r => r.ok ? r.json() : { projects: [] })
+      .then(data => setRecentProjects(data.projects || []))
+      .catch(() => {});
+  }, []);
+
+  // Check provider availability — only 'completed' counts, 'skipped' means user deferred but has no real credentials
+  useEffect(() => {
+    const checkProvider = () => {
+      fetch('/api/setup')
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (data) {
+            setHasProvider(data.provider === 'completed');
+          }
+        })
+        .catch(() => {});
+    };
+    checkProvider();
+
+    window.addEventListener('provider-changed', checkProvider);
+    return () => window.removeEventListener('provider-changed', checkProvider);
+  }, []);
+
+  const handleSelectFolder = useCallback(async () => {
+    if (isElectron) {
+      const path = await openNativePicker({ title: t('folderPicker.title') });
+      if (path) {
+        setWorkingDir(path);
+        localStorage.setItem('codepilot:last-working-directory', path);
+      }
+    } else {
+      setFolderPickerOpen(true);
+    }
+  }, [isElectron, openNativePicker, t]);
+
+  const handleFolderPickerSelect = useCallback((path: string) => {
+    setWorkingDir(path);
+    localStorage.setItem('codepilot:last-working-directory', path);
+    setFolderPickerOpen(false);
+  }, []);
+
+  const handleSelectProject = useCallback((path: string) => {
+    setWorkingDir(path);
+    localStorage.setItem('codepilot:last-working-directory', path);
+  }, []);
 
   const stopStreaming = useCallback(() => {
     abortControllerRef.current?.abort();
@@ -109,15 +223,16 @@ export default function NewChatPage() {
 
       // Require a project directory before sending
       if (!workingDir.trim()) {
-        const hint: Message = {
-          id: 'hint-' + Date.now(),
-          session_id: '',
-          role: 'assistant',
-          content: '**Please select a project directory first.** Use the folder picker in the toolbar below to choose a working directory before sending a message.',
-          created_at: new Date().toISOString(),
-          token_usage: null,
-        };
-        setMessages((prev) => [...prev, hint]);
+        setErrorBanner({ message: t('chat.empty.noDirectory') });
+        return;
+      }
+
+      // Require a provider before sending
+      if (!hasProvider) {
+        setErrorBanner({
+          message: t('error.providerUnavailable'),
+          description: t('chat.empty.noProvider'),
+        });
         return;
       }
 
@@ -336,15 +451,7 @@ export default function NewChatPage() {
           }
         } else {
           const errMsg = error instanceof Error ? error.message : 'Unknown error';
-          const errorMessage: Message = {
-            id: 'temp-error-' + Date.now(),
-            session_id: '',
-            role: 'assistant',
-            content: `**Error:** ${errMsg}`,
-            created_at: new Date().toISOString(),
-            token_usage: null,
-          };
-          setMessages((prev) => [...prev, errorMessage]);
+          setErrorBanner({ message: t('error.sessionCreateFailed'), description: errMsg });
         }
       } finally {
         setIsStreaming(false);
@@ -359,7 +466,7 @@ export default function NewChatPage() {
         abortControllerRef.current = null;
       }
     },
-    [isStreaming, router, workingDir, mode, currentModel, currentProviderId, permissionProfile, selectedEffort, thinkingMode, setPendingApprovalSessionId]
+    [isStreaming, router, workingDir, mode, currentModel, currentProviderId, permissionProfile, selectedEffort, thinkingMode, context1m, setPendingApprovalSessionId, t, hasProvider]
   );
 
   const handleCommand = useCallback((command: string) => {
@@ -398,16 +505,37 @@ export default function NewChatPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <MessageList
-        messages={messages}
-        streamingContent={streamingContent}
-        isStreaming={isStreaming}
-        sessionId={createdSessionId}
-        toolUses={toolUses}
-        toolResults={toolResults}
-        streamingToolOutput={streamingToolOutput}
-        statusText={statusText}
-      />
+      {messages.length === 0 && !isStreaming && (!workingDir.trim() || !hasProvider) ? (
+        <ChatEmptyState
+          hasDirectory={!!workingDir.trim()}
+          hasProvider={hasProvider}
+          onSelectFolder={handleSelectFolder}
+          recentProjects={recentProjects}
+          onSelectProject={handleSelectProject}
+        />
+      ) : (
+        <MessageList
+          messages={messages}
+          streamingContent={streamingContent}
+          isStreaming={isStreaming}
+          sessionId={createdSessionId}
+          toolUses={toolUses}
+          toolResults={toolResults}
+          streamingToolOutput={streamingToolOutput}
+          statusText={statusText}
+        />
+      )}
+      {errorBanner && (
+        <ErrorBanner
+          message={errorBanner.message}
+          description={errorBanner.description}
+          className="mx-4 mb-2"
+          onDismiss={() => setErrorBanner(null)}
+          actions={[
+            { label: t('error.retry'), onClick: () => setErrorBanner(null) },
+          ]}
+        />
+      )}
       <PermissionPrompt
         pendingPermission={pendingPermission}
         permissionResolved={permissionResolved}
@@ -439,6 +567,11 @@ export default function NewChatPage() {
             onPermissionChange={setPermissionProfile}
           />
         }
+      />
+      <FolderPicker
+        open={folderPickerOpen}
+        onOpenChange={setFolderPickerOpen}
+        onSelect={handleFolderPickerSelect}
       />
     </div>
   );

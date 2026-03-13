@@ -20,6 +20,8 @@ import { SplitChatContainer } from "./SplitChatContainer";
 import { ErrorBoundary } from "./ErrorBoundary";
 import { getActiveSessionIds, getSnapshot } from "@/lib/stream-session-manager";
 import { useGitStatus } from "@/hooks/useGitStatus";
+import { SetupCenter } from '@/components/setup/SetupCenter';
+import { Toaster } from '@/components/ui/toast';
 
 const SPLIT_SESSIONS_KEY = "codepilot:split-sessions";
 const SPLIT_ACTIVE_COLUMN_KEY = "codepilot:split-active-column";
@@ -69,6 +71,31 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
 
   const [chatListOpenRaw, setChatListOpenRaw] = useState(false);
+  const [setupOpen, setSetupOpen] = useState(false);
+  const [setupInitialCard, setSetupInitialCard] = useState<'claude' | 'provider' | 'project' | undefined>();
+
+  // Check if setup is needed
+  useEffect(() => {
+    fetch('/api/setup')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data && !data.completed) {
+          setSetupOpen(true);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  // Listen for open-setup-center events
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent).detail;
+      setSetupInitialCard(detail?.initialCard);
+      setSetupOpen(true);
+    };
+    window.addEventListener('open-setup-center', handler);
+    return () => window.removeEventListener('open-setup-center', handler);
+  }, []);
 
   // Sync with viewport after hydration to avoid SSR mismatch
   /* eslint-disable react-hooks/set-state-in-effect */
@@ -420,6 +447,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
           <UpdateDialog />
+          <Toaster />
+          {setupOpen && (
+            <SetupCenter
+              onClose={() => setSetupOpen(false)}
+              initialCard={setupInitialCard}
+            />
+          )}
         </TooltipProvider>
         </BatchImageGenContext.Provider>
         </ImageGenContext.Provider>

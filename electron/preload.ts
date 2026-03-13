@@ -6,6 +6,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     electron: process.versions.electron,
     node: process.versions.node,
     chrome: process.versions.chrome,
+    platform: process.platform,
   },
   shell: {
     openPath: (folderPath: string) => ipcRenderer.invoke('shell:open-path', folderPath),

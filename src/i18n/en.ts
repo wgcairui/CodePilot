@@ -984,6 +984,76 @@ const en = {
   'terminal.connecting': 'Connecting...',
   'terminal.disconnected': 'Disconnected',
   'terminal.exited': 'Process exited',
+
+  // ── Setup Center ──────────────────────────────────────────────
+  'setup.title': 'Welcome to CodePilot',
+  'setup.subtitle': 'Let\'s get you set up in a few quick steps.',
+  'setup.skipAndEnter': 'Skip and Enter',
+  'setup.progress': '{completed}/3 completed',
+  'setup.openSetupCenter': 'Initial Setup Guide',
+  'setup.openSetupCenterDesc': 'Check or reconfigure Claude Code connection, API provider, and default project directory',
+  'setup.open': 'Open',
+
+  // Setup: Welcome card
+  'setup.welcome.title': 'Welcome',
+  'setup.welcome.description': 'CodePilot is a desktop GUI for Claude Code. It connects to the Claude Code CLI to provide a visual interface for AI-assisted coding.',
+
+  // Setup: Claude Code card
+  'setup.claude.title': 'Claude Code CLI',
+  'setup.claude.description': 'CodePilot requires the Claude Code CLI to function.',
+  'setup.claude.detected': 'Claude Code detected',
+  'setup.claude.notFound': 'Claude Code not found',
+  'setup.claude.conflict': 'Multiple installations detected — this may cause version conflicts',
+  'setup.claude.conflictUsing': 'Currently using',
+  'setup.claude.conflictOther': 'Also found',
+  'setup.claude.conflictRemoveHint': 'To remove, run:',
+  'setup.claude.conflictResolved': 'After cleanup, click Re-detect to verify.',
+  'setup.claude.missingGit': 'Git for Windows required',
+  'setup.claude.useRecommended': 'Use Recommended',
+  'setup.claude.install': 'Install',
+  'setup.claude.redetect': 'Re-detect',
+  'setup.claude.viewCleanup': 'View Cleanup',
+  'setup.claude.skip': 'Skip',
+
+  // Setup: Provider card
+  'setup.provider.title': 'API Provider',
+  'setup.provider.description': 'Configure how CodePilot connects to AI models.',
+  'setup.provider.envDetected': 'Environment variables detected — use Claude Code env as your provider.',
+  'setup.provider.useEnv': 'Use Claude Code Env',
+  'setup.provider.noProvider': 'No provider configured. Select a preset to get started.',
+  'setup.provider.configured': 'Provider configured',
+  'setup.provider.skip': 'Skip',
+
+  // Setup: Project directory card
+  'setup.project.title': 'Project Directory',
+  'setup.project.description': 'Choose a default project directory to start working in.',
+  'setup.project.selectDirectory': 'Select Directory',
+  'setup.project.recentProjects': 'Recent Projects',
+  'setup.project.noRecent': 'No recent projects found.',
+  'setup.project.selected': 'Project directory set',
+  'setup.project.skip': 'Skip',
+
+  // Chat empty state
+  'chat.empty.noDirectory': 'Select a project directory to get started',
+  'chat.empty.noProvider': 'Configure an API provider to start chatting',
+  'chat.empty.openSetup': 'Open Setup',
+  'chat.empty.selectFolder': 'Select Folder',
+  'chat.empty.skipForNow': 'Skip for now',
+  'chat.empty.ready': 'Ready to chat. Type a message to get started.',
+  'chat.empty.recentProjects': 'Recent Projects',
+
+  // Platform
+  'platform.openInFileManager': 'Double-click to open in {fileManager}',
+
+  // Error messages
+  'error.sessionCreateFailed': 'Failed to create session',
+  'error.titleSaveFailed': 'Failed to save title',
+  'error.pushFailed': 'Push failed',
+  'error.directoryInvalid': 'Directory no longer exists',
+  'error.providerUnavailable': 'No API provider available',
+  'error.retry': 'Retry',
+  'error.selectDirectory': 'Select Directory',
+  'error.openSetup': 'Open Setup',
 } as const;
 
 export type TranslationKey = keyof typeof en;

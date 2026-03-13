@@ -981,6 +981,76 @@ const zh: Record<TranslationKey, string> = {
   'terminal.connecting': '连接中...',
   'terminal.disconnected': '已断开',
   'terminal.exited': '进程已退出',
+
+  // ── Setup Center ──────────────────────────────────────────────
+  'setup.title': '欢迎使用 CodePilot',
+  'setup.subtitle': '让我们快速完成几个设置步骤。',
+  'setup.skipAndEnter': '跳过并进入',
+  'setup.progress': '{completed}/3 已完成',
+  'setup.openSetupCenter': '首次设置引导',
+  'setup.openSetupCenterDesc': '检查或重新配置 Claude Code 连接、API 提供商和默认项目目录',
+  'setup.open': '打开',
+
+  // Setup: Welcome card
+  'setup.welcome.title': '欢迎',
+  'setup.welcome.description': 'CodePilot 是 Claude Code 的桌面 GUI 客户端。它连接到 Claude Code CLI，提供 AI 辅助编码的可视化界面。',
+
+  // Setup: Claude Code card
+  'setup.claude.title': 'Claude Code CLI',
+  'setup.claude.description': 'CodePilot 需要 Claude Code CLI 才能正常工作。',
+  'setup.claude.detected': '已检测到 Claude Code',
+  'setup.claude.notFound': '未找到 Claude Code',
+  'setup.claude.conflict': '检测到多个安装版本，可能导致版本冲突',
+  'setup.claude.conflictUsing': '当前使用',
+  'setup.claude.conflictOther': '另外发现',
+  'setup.claude.conflictRemoveHint': '卸载命令：',
+  'setup.claude.conflictResolved': '清理完成后，点击"重新检测"以确认。',
+  'setup.claude.missingGit': '需要安装 Git for Windows',
+  'setup.claude.useRecommended': '使用推荐版本',
+  'setup.claude.install': '安装',
+  'setup.claude.redetect': '重新检测',
+  'setup.claude.viewCleanup': '查看清理方式',
+  'setup.claude.skip': '跳过',
+
+  // Setup: Provider card
+  'setup.provider.title': 'API 服务商',
+  'setup.provider.description': '配置 CodePilot 连接 AI 模型的方式。',
+  'setup.provider.envDetected': '检测到环境变量 — 使用 Claude Code 环境变量作为服务商。',
+  'setup.provider.useEnv': '使用 Claude Code 环境',
+  'setup.provider.noProvider': '未配置服务商。选择一个预设开始。',
+  'setup.provider.configured': '服务商已配置',
+  'setup.provider.skip': '跳过',
+
+  // Setup: Project directory card
+  'setup.project.title': '项目目录',
+  'setup.project.description': '选择一个默认项目目录以开始工作。',
+  'setup.project.selectDirectory': '选择目录',
+  'setup.project.recentProjects': '最近的项目',
+  'setup.project.noRecent': '暂无最近的项目。',
+  'setup.project.selected': '已设置项目目录',
+  'setup.project.skip': '跳过',
+
+  // Chat empty state
+  'chat.empty.noDirectory': '选择一个项目目录以开始',
+  'chat.empty.noProvider': '配置 API 服务商以开始对话',
+  'chat.empty.openSetup': '打开设置',
+  'chat.empty.selectFolder': '选择文件夹',
+  'chat.empty.skipForNow': '暂时跳过',
+  'chat.empty.ready': '准备就绪。输入消息开始对话。',
+  'chat.empty.recentProjects': '最近的项目',
+
+  // Platform
+  'platform.openInFileManager': '双击在{fileManager}中打开',
+
+  // Error messages
+  'error.sessionCreateFailed': '创建会话失败',
+  'error.titleSaveFailed': '保存标题失败',
+  'error.pushFailed': '推送失败',
+  'error.directoryInvalid': '目录已不存在',
+  'error.providerUnavailable': '无可用的 API 服务商',
+  'error.retry': '重试',
+  'error.selectDirectory': '选择目录',
+  'error.openSetup': '打开设置',
 };
 
 export default zh;

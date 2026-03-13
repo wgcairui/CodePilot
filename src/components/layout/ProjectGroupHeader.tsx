@@ -15,6 +15,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { useTranslation } from '@/hooks/useTranslation';
+import { useClientPlatform } from '@/hooks/useClientPlatform';
 
 interface ProjectGroupHeaderProps {
   workingDirectory: string;
@@ -39,6 +41,9 @@ export function ProjectGroupHeader({
   onMouseLeave,
   onCreateSession,
 }: ProjectGroupHeaderProps) {
+  const { t } = useTranslation();
+  const { fileManagerName } = useClientPlatform();
+
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -97,20 +102,20 @@ export function ProjectGroupHeader({
                 >
                   <Plus size={14} />
                   <span className="sr-only">
-                    New chat in {displayName}
+                    {t('chatList.newConversation')} - {displayName}
                   </span>
                 </Button>
               </TooltipTrigger>
               <TooltipContent side="right">
-                New chat in {displayName}
+                {t('chatList.newConversation')} - {displayName}
               </TooltipContent>
             </Tooltip>
           )}
         </div>
       </TooltipTrigger>
       <TooltipContent side="right" className="max-w-xs">
-        <p className="text-xs break-all">{workingDirectory || 'No Project'}</p>
-        {workingDirectory && <p className="text-[10px] text-muted-foreground mt-0.5">Double-click to open in Finder</p>}
+        <p className="text-xs break-all">{workingDirectory || t('chatList.noSessions')}</p>
+        {workingDirectory && <p className="text-[10px] text-muted-foreground mt-0.5">{t('platform.openInFileManager', { fileManager: fileManagerName })}</p>}
       </TooltipContent>
     </Tooltip>
   );

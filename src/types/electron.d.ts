@@ -64,6 +64,7 @@ interface ElectronAPI {
     electron: string;
     node: string;
     chrome: string;
+    platform: string;
   };
   shell: {
     openPath: (path: string) => Promise<string>;

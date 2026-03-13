@@ -127,23 +127,22 @@ export function ConnectionStatus() {
     checkStatus();
   }, [checkStatus]);
 
-  // Auto-prompt install wizard on first disconnect detection (Electron only)
+  // Auto-prompt setup center on first disconnect detection (instead of install wizard)
   useEffect(() => {
     if (
       status !== null &&
       !status.connected &&
-      isElectron &&
       !autoPromptedRef.current &&
-      !dialogOpen &&
-      !wizardOpen
+      !dialogOpen
     ) {
       const dismissed = localStorage.getItem("codepilot:install-wizard-dismissed");
       if (!dismissed) {
         autoPromptedRef.current = true;
-        setWizardOpen(true); // eslint-disable-line react-hooks/set-state-in-effect -- intentional: auto-prompt on first disconnect
+        window.dispatchEvent(new CustomEvent('open-setup-center', { detail: { initialCard: 'claude' } }));
+        localStorage.setItem("codepilot:install-wizard-dismissed", "1");  
       }
     }
-  }, [status, isElectron, dialogOpen, wizardOpen]);
+  }, [status, dialogOpen]);
 
   const handleWizardOpenChange = useCallback((open: boolean) => {
     setWizardOpen(open);

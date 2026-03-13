@@ -20,6 +20,7 @@ import { usePanel } from "@/hooks/usePanel";
 import { useSplit } from "@/hooks/useSplit";
 import { useTranslation } from "@/hooks/useTranslation";
 import { useNativeFolderPicker } from "@/hooks/useNativeFolderPicker";
+import { showToast } from '@/hooks/useToast';
 import { ConnectionStatus } from "./ConnectionStatus";
 import { ImportSessionDialog } from "./ImportSessionDialog";
 import { SessionListItem, SplitGroupSection } from "./SessionListItem";
@@ -96,8 +97,22 @@ export function ChatListPanel({ open, width }: ChatListPanelProps) {
   }, [isElectron, openNativePicker, t, handleFolderSelect]);
 
   const handleNewChat = useCallback(async () => {
-    const lastDir = workingDirectory
+    let lastDir = workingDirectory
       || (typeof window !== 'undefined' ? localStorage.getItem("codepilot:last-working-directory") : null);
+
+    // Fall back to setup default project if no recent directory
+    if (!lastDir) {
+      try {
+        const setupRes = await fetch('/api/setup');
+        if (setupRes.ok) {
+          const setupData = await setupRes.json();
+          if (setupData.defaultProject) {
+            lastDir = setupData.defaultProject;
+            localStorage.setItem('codepilot:last-working-directory', lastDir!);
+          }
+        }
+      } catch { /* ignore */ }
+    }
 
     if (!lastDir) {
       // No saved directory — let user pick one
@@ -112,10 +127,32 @@ export function ChatListPanel({ open, width }: ChatListPanelProps) {
         `/api/files/browse?dir=${encodeURIComponent(lastDir)}`
       );
       if (!checkRes.ok) {
-        // Directory is gone — clear stale value and prompt user
+        // Directory is gone — clear stale value, try setup default before prompting
         localStorage.removeItem("codepilot:last-working-directory");
-        openFolderPicker();
-        return;
+        let recovered = false;
+        try {
+          const setupRes = await fetch('/api/setup');
+          if (setupRes.ok) {
+            const setupData = await setupRes.json();
+            if (setupData.defaultProject && setupData.defaultProject !== lastDir) {
+              const defaultCheck = await fetch(`/api/files/browse?dir=${encodeURIComponent(setupData.defaultProject)}`);
+              if (defaultCheck.ok) {
+                lastDir = setupData.defaultProject;
+                localStorage.setItem('codepilot:last-working-directory', lastDir!);
+                recovered = true;
+              }
+            }
+          }
+        } catch { /* ignore */ }
+        if (!recovered) {
+          showToast({
+            type: 'warning',
+            message: t('error.directoryInvalid'),
+            action: { label: t('error.selectDirectory'), onClick: () => openFolderPicker() },
+          });
+          openFolderPicker();
+          return;
+        }
       }
 
       const { model, provider_id } = getCurrentModelAndProvider();
@@ -138,7 +175,7 @@ export function ChatListPanel({ open, width }: ChatListPanelProps) {
     } finally {
       setCreatingChat(false);
     }
-  }, [router, workingDirectory, openFolderPicker, getCurrentModelAndProvider]);
+  }, [router, workingDirectory, openFolderPicker, getCurrentModelAndProvider, t]);
 
   const toggleProject = useCallback((wd: string) => {
     setCollapsedProjects((prev) => {

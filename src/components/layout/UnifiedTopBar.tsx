@@ -4,12 +4,9 @@ import { useState, useCallback, useEffect, useRef } from "react";
 import { usePathname } from "next/navigation";
 import {
   GitBranch,
-  GitCommit,
-  CloudArrowUp,
   TreeStructure,
   PencilSimple,
   DotOutline,
-  CaretDown,
 } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,15 +15,10 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { usePanel } from "@/hooks/usePanel";
 import { useTranslation } from "@/hooks/useTranslation";
-import { CommitDialog } from "@/components/git/CommitDialog";
+import { useClientPlatform } from '@/hooks/useClientPlatform';
+import { showToast } from '@/hooks/useToast';
 
 export function UnifiedTopBar() {
   const {
@@ -42,6 +34,7 @@ export function UnifiedTopBar() {
     gitDirtyCount,
   } = usePanel();
   const { t } = useTranslation();
+  const { isWindows } = useClientPlatform();
   const pathname = usePathname();
 
   // Only show Git/terminal/panel controls on chat detail routes (/chat/[id]),
@@ -75,10 +68,10 @@ export function UnifiedTopBar() {
         window.dispatchEvent(new CustomEvent('session-updated', { detail: { id: sessionId, title: trimmed } }));
       }
     } catch {
-      // silently fail
+      showToast({ type: 'error', message: t('error.titleSaveFailed') });
     }
     setIsEditingTitle(false);
-  }, [editTitle, sessionId, setSessionTitle]);
+  }, [editTitle, sessionId, setSessionTitle, t]);
 
   const handleTitleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter') {
@@ -95,50 +88,8 @@ export function UnifiedTopBar() {
     }
   }, [isEditingTitle]);
 
-  // --- Commit dialog ---
-  const [commitDialogOpen, setCommitDialogOpen] = useState(false);
-
-  const handleCommitSuccess = useCallback(() => {
-    // Trigger git status refresh via custom event
-    window.dispatchEvent(new CustomEvent('git-refresh'));
-  }, []);
-
-  // --- Push handler ---
-  const [pushing, setPushing] = useState(false);
-  const [pushMessage, setPushMessage] = useState<{ type: 'error' | 'success'; text: string } | null>(null);
-  const handlePush = useCallback(async () => {
-    if (!workingDirectory || pushing) return;
-    setPushing(true);
-    setPushMessage(null);
-    try {
-      const res = await fetch('/api/git/push', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ cwd: workingDirectory }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({ error: 'Push failed' }));
-        setPushMessage({ type: 'error', text: data.error || 'Push failed' });
-        return;
-      }
-      setPushMessage({ type: 'success', text: t('git.pushSuccess') });
-      window.dispatchEvent(new CustomEvent('git-refresh'));
-    } catch (err) {
-      setPushMessage({ type: 'error', text: err instanceof Error ? err.message : 'Push failed' });
-    } finally {
-      setPushing(false);
-    }
-  }, [workingDirectory, pushing, t]);
-
-  // Auto-dismiss push message after 4s
-  useEffect(() => {
-    if (!pushMessage) return;
-    const timer = setTimeout(() => setPushMessage(null), 4000);
-    return () => clearTimeout(timer);
-  }, [pushMessage]);
-
   // Extract project name from working directory
-  const projectName = workingDirectory ? workingDirectory.split('/').pop() || '' : '';
+  const projectName = workingDirectory ? workingDirectory.split(/[\\/]/).filter(Boolean).pop() || '' : '';
 
   return (
     <>
@@ -225,45 +176,6 @@ export function UnifiedTopBar() {
         >
           {isChatRoute && (
             <>
-              {/* Commit button + Push dropdown */}
-              <div className="flex items-center border border-border rounded-md">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setCommitDialogOpen(true)}
-                  className="rounded-r-none h-7 px-2 text-xs gap-1"
-                >
-                  <GitCommit size={14} />
-                  {t('topBar.commit')}
-                </Button>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="rounded-l-none border-l border-border h-7 px-1 min-w-0"
-                    >
-                      <CaretDown size={10} />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" side="bottom">
-                    <DropdownMenuItem onClick={() => setCommitDialogOpen(true)}>
-                      <GitCommit size={14} className="mr-2" />
-                      {t('topBar.commit')}
-                    </DropdownMenuItem>
-                    <DropdownMenuItem onClick={handlePush} disabled={pushing}>
-                      <CloudArrowUp size={14} className="mr-2" />
-                      {pushing ? t('git.loading') : t('topBar.push')}
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              </div>
-              {pushMessage && (
-                <span className={`text-xs px-1.5 py-0.5 rounded ${pushMessage.type === 'error' ? 'text-destructive' : 'text-emerald-600'}`}>
-                  {pushMessage.text}
-                </span>
-              )}
-
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -304,16 +216,9 @@ export function UnifiedTopBar() {
               </Tooltip>
             </>
           )}
+          {isWindows && <div style={{ width: 138 }} className="shrink-0" />}
         </div>
       </div>
-
-      {/* Commit Dialog */}
-      <CommitDialog
-        cwd={workingDirectory}
-        open={commitDialogOpen}
-        onClose={() => setCommitDialogOpen(false)}
-        onSuccess={handleCommitSuccess}
-      />
     </>
   );
 }

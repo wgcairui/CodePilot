@@ -217,6 +217,22 @@ export function GeneralSection() {
           </Select>
         </FieldRow>
 
+        {/* Setup Center */}
+        <FieldRow
+          label={t('setup.openSetupCenter')}
+          description={t('setup.openSetupCenterDesc')}
+          separator
+        >
+          <Button
+            variant="outline"
+            size="sm"
+            className="text-xs"
+            onClick={() => window.dispatchEvent(new CustomEvent('open-setup-center'))}
+          >
+            {t('setup.open')}
+          </Button>
+        </FieldRow>
+
       </SettingsCard>
 
       {/* Appearance */}
