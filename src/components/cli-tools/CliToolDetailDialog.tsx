@@ -171,8 +171,7 @@ export function CliToolDetailDialog({
                 const prefill = isZh
                   ? `我想用 ${tool.name} 工具完成：`
                   : `I want to use ${tool.name} to: `;
-                router.push(`/chat?prefill=${encodeURIComponent(prefill)}`);
-                onOpenChange(false);
+                window.location.href = `/chat?prefill=${encodeURIComponent(prefill)}`;
               }}
             >
               <Play size={14} />

@@ -1,6 +1,5 @@
 "use client";
 
-import { useRouter } from "next/navigation";
 import {
   Dialog,
   DialogContent,
@@ -34,7 +33,6 @@ export function CliToolExtraDetailDialog({
   binPath,
 }: CliToolExtraDetailDialogProps) {
   const { t } = useTranslation();
-  const router = useRouter();
   const isZh = locale === 'zh';
 
   const structured = autoDescription?.structured as CliToolStructuredDesc | undefined;
@@ -47,8 +45,7 @@ export function CliToolExtraDetailDialog({
     const prefill = isZh
       ? `我想用 ${displayName} 工具完成：`
       : `I want to use ${displayName} to: `;
-    router.push(`/chat?prefill=${encodeURIComponent(prefill)}`);
-    onOpenChange(false);
+    window.location.href = `/chat?prefill=${encodeURIComponent(prefill)}`;
   };
 
   return (

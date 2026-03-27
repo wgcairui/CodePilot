@@ -1,7 +1,13 @@
 import { NextResponse } from 'next/server';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import { CLI_TOOLS_CATALOG, EXTRA_WELL_KNOWN_BINS } from '@/lib/cli-tools-catalog';
 import { generateTextViaSdk } from '@/lib/claude-client';
 import { upsertCliToolDescription, getCustomCliTool } from '@/lib/db';
+import { detectAllCliTools } from '@/lib/cli-tools-detect';
+import { getExpandedPath } from '@/lib/platform';
+
+const execFileAsync = promisify(execFile);
 
 /**
  * Try to extract a JSON object from text that may be wrapped in markdown code blocks
@@ -55,9 +61,42 @@ export async function POST(
     const categories = catalogTool?.categories.join(', ') ?? 'general';
     const homepage = catalogTool?.homepage ?? 'N/A';
 
+    // Fetch --help output from the actual binary for context
+    let helpContext = '';
+    try {
+      const expandedPath = getExpandedPath();
+      const env = { ...process.env, PATH: expandedPath };
+      // Find the binary path
+      let binPath: string | null = null;
+      if (customTool) {
+        binPath = customTool.binPath;
+      } else {
+        const bins = catalogTool?.binNames ?? (extraEntry ? [extraEntry[2]] : []);
+        for (const bin of bins) {
+          try {
+            const { stdout } = await execFileAsync('/usr/bin/which', [bin], { timeout: 3000, env });
+            const resolved = stdout.trim().split(/\r?\n/)[0]?.trim();
+            if (resolved) { binPath = resolved; break; }
+          } catch { /* try next */ }
+        }
+      }
+      if (binPath) {
+        for (const flag of ['--help', '-h']) {
+          try {
+            const { stdout, stderr } = await execFileAsync(binPath, [flag], { timeout: 5000, env });
+            const output = (stdout || stderr).trim();
+            if (output.length > 50) {
+              helpContext = `\n\nTool --help output (use this as primary reference for generating the description):\n\`\`\`\n${output.slice(0, 2000)}\n\`\`\``;
+              break;
+            }
+          } catch { /* try next flag */ }
+        }
+      }
+    } catch { /* help output is optional */ }
+
     const prompt = `You are a technical writer. Write a comprehensive, practical description of the CLI tool "${toolName}" (binary: ${binNames}).
 Categories: ${categories}
-Homepage: ${homepage}
+Homepage: ${homepage}${helpContext}
 
 Provide the description in both Chinese and English with the following structure:
 
@@ -76,30 +115,50 @@ Respond in this exact JSON format (no markdown, no code fences, just raw JSON):
   ]
 }`;
 
-    let result: string;
-    try {
-      result = await generateTextViaSdk({
-        providerId: providerId || undefined,
-        model: requestModel || undefined,
-        system: 'You are a technical documentation writer. Respond with raw JSON only, no markdown formatting.',
-        prompt,
-      });
-    } catch (genError) {
-      console.error(`[cli-tools/${id}/describe] generateTextViaSdk threw:`, genError);
-      const msg = genError instanceof Error ? genError.message : 'Text generation failed';
-      return NextResponse.json({ error: msg }, { status: 502 });
+    // Retry loop: AI may produce invalid JSON on first attempt
+    const MAX_RETRIES = 3;
+    let parsed: Record<string, unknown> | null = null;
+    let lastError = '';
+
+    for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+      let result: string;
+      try {
+        result = await generateTextViaSdk({
+          providerId: providerId || undefined,
+          model: requestModel || undefined,
+          system: 'You are a technical documentation writer. Respond with raw JSON only, no markdown formatting.',
+          prompt: attempt > 1
+            ? prompt + '\n\nIMPORTANT: Your previous response was not valid JSON. Please respond with ONLY a raw JSON object, no explanations.'
+            : prompt,
+        });
+      } catch (genError) {
+        console.error(`[cli-tools/${id}/describe] attempt ${attempt} generateTextViaSdk threw:`, genError);
+        lastError = genError instanceof Error ? genError.message : 'Text generation failed';
+        continue;
+      }
+
+      if (!result || !result.trim()) {
+        lastError = 'AI returned an empty response. Please check your provider configuration.';
+        continue;
+      }
+
+      try {
+        parsed = extractJson(result);
+        const intro = parsed.intro as { zh?: string; en?: string } | undefined;
+        if (intro?.zh && intro?.en) break; // Success
+        lastError = 'AI response missing required intro fields';
+        parsed = null;
+      } catch (parseErr) {
+        lastError = parseErr instanceof Error ? parseErr.message : 'AI response was not valid JSON';
+        parsed = null;
+        console.warn(`[cli-tools/${id}/describe] attempt ${attempt} JSON parse failed, retrying...`);
+      }
     }
 
-    if (!result || !result.trim()) {
-      return NextResponse.json(
-        { error: 'AI returned an empty response. Please check your provider configuration.' },
-        { status: 502 }
-      );
+    if (!parsed) {
+      return NextResponse.json({ error: lastError }, { status: 502 });
     }
 
-    const parsed = extractJson(result);
-
-    // Extract and validate structured data — normalize to safe shapes
     const intro = parsed.intro as { zh?: string; en?: string } | undefined;
     if (!intro?.zh || !intro?.en) {
       return NextResponse.json(

@@ -126,7 +126,8 @@ export function CliToolsManager() {
     const prefill = locale === 'zh'
       ? '我想安装一个新的 CLI 工具并添加到工具库。\n工具名称：\n安装命令（如 brew install xxx）：'
       : 'I want to install a new CLI tool and add it to my tool library.\nTool name: \nInstall command (e.g. brew install xxx): ';
-    router.push(`/chat?prefill=${encodeURIComponent(prefill)}`);
+    // Use hard navigation to ensure the new page reads the prefill param fresh
+    window.location.href = `/chat?prefill=${encodeURIComponent(prefill)}`;
   };
 
   const handleDeleteCustomTool = async (id: string) => {

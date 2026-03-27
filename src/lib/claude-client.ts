@@ -581,7 +581,7 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
         // Wide regex to cover natural phrasing like "帮我装 jq", "install uv",
         // "brew install", "pip install", "npm install -g", etc.
         const needsCliToolsMcp = (() => {
-          const cliKeywords = /CLI\s*工具|cli.tool|安装.*工具|卸载.*工具|添加.*工具|更新.*工具|升级.*工具|工具库|tool\s*library|codepilot_cli_tools|帮我装|帮我安装|帮我更新|帮我升级|\binstall\s+\w+|\buninstall\s+\w+|\bupdate\s+\w+|\bupgrade\s+\w+|brew\s+install|brew\s+upgrade|pip\s+install|pipx\s+install|npm\s+install\s+-g|npm\s+update\s+-g|cargo\s+install|apt\s+install|apt-get\s+install/i;
+          const cliKeywords = /CLI\s*工具|cli.tool|安装.*工具|卸载.*工具|添加.*工具|更新.*工具|升级.*工具|入库.*工具|工具.*入库|加入.*工具库|添加到.*库|工具库|tool\s*library|codepilot_cli_tools|帮我装|帮我安装|帮我更新|帮我升级|\binstall\s+[@\w./-]+|\buninstall\s+[@\w./-]+|\bupdate\s+[@\w./-]+|\bupgrade\s+[@\w./-]+|brew\s+install|brew\s+upgrade|pip\s+install|pipx\s+install|npm\s+install\s+-g|npm\s+update\s+-g|cargo\s+install|apt\s+install|apt-get\s+install/i;
           if (cliKeywords.test(prompt)) return true;
           if (conversationHistory?.some(m => cliKeywords.test(m.content))) return true;
           return false;

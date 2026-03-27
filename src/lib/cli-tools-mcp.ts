@@ -79,6 +79,23 @@ function buildUpdateCommand(method: string, packageName: string): string | null 
   }
 }
 
+/** Run --help on a binary and return truncated output for context. */
+async function getHelpOutput(binPath: string): Promise<string> {
+  const env = { ...process.env, PATH: getExpandedPath() };
+  // Try --help first, fall back to -h
+  for (const flag of ['--help', '-h']) {
+    try {
+      const { stdout, stderr } = await execFileAsync(binPath, [flag], {
+        timeout: 5000,
+        env,
+      });
+      const output = (stdout || stderr).trim();
+      if (output.length > 50) return output.slice(0, 2000); // truncate to keep context manageable
+    } catch { /* try next flag */ }
+  }
+  return '';
+}
+
 // ── System prompt hint ───────────────────────────────────────────────
 
 export const CLI_TOOLS_MCP_SYSTEM_PROMPT = `<cli-tools-capability>
@@ -89,7 +106,7 @@ You have CLI tool management capabilities via MCP tools:
 - codepilot_cli_tools_remove: Remove a custom tool
 - codepilot_cli_tools_check_updates: Check which tools have available updates
 - codepilot_cli_tools_update: Update a tool to its latest version
-After installing a tool, generate a bilingual description (zh/en) and call codepilot_cli_tools_add to save it. If the tool requires authentication, guide the user through the setup steps.
+After installing or registering a tool, the --help output is automatically included in the result. Use it to generate an accurate bilingual description (zh/en) and call codepilot_cli_tools_add to save it. If the tool requires authentication, guide the user through the setup steps.
 </cli-tools-capability>`;
 
 // ── MCP server factory ───────────────────────────────────────────────
@@ -353,8 +370,17 @@ export function createCliToolsMcpServer() {
                 resultLines.push('Please guide the user through the authentication steps above.');
               }
 
+              // Capture --help output so the model can generate an accurate description
+              const helpOutput = await getHelpOutput(binPath);
+              if (helpOutput) {
+                resultLines.push('');
+                resultLines.push('--- Tool Help Output ---');
+                resultLines.push(helpOutput);
+                resultLines.push('--- End Help Output ---');
+              }
+
               resultLines.push('');
-              resultLines.push('Now please generate a bilingual description (zh/en) for this tool and call codepilot_cli_tools_add to save it.');
+              resultLines.push('Now please generate a bilingual description (zh/en) based on the help output above and call codepilot_cli_tools_add to save it.');
 
               return {
                 content: [{ type: 'text' as const, text: resultLines.join('\n') }],
@@ -447,10 +473,29 @@ export function createCliToolsMcpServer() {
             }
 
             const verStr = version ? ` v${version}` : '';
+            const resultParts = [
+              `Registered "${toolName}"${verStr}.`,
+              `Path: ${binPath}`,
+              `Tool ID: ${created.id}`,
+            ];
+            if (descriptionZh) {
+              resultParts.push('Description saved.');
+            } else {
+              // No description provided — include help output so model can generate one
+              const helpOutput = await getHelpOutput(binPath);
+              if (helpOutput) {
+                resultParts.push('');
+                resultParts.push('--- Tool Help Output ---');
+                resultParts.push(helpOutput);
+                resultParts.push('--- End Help Output ---');
+                resultParts.push('');
+                resultParts.push('Please generate a bilingual description (zh/en) based on the help output above and call codepilot_cli_tools_add with toolId to save it.');
+              }
+            }
             return {
               content: [{
                 type: 'text' as const,
-                text: `Registered "${toolName}"${verStr}.\nPath: ${binPath}\nTool ID: ${created.id}${descriptionZh ? '\nDescription saved.' : ''}`,
+                text: resultParts.join('\n'),
               }],
             };
           } catch (error) {
