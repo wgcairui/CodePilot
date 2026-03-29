@@ -1,7 +1,6 @@
 # 生成式 UI 持久化与项目看板
 
-> 技术实现见 [docs/handover/generative-ui.md](../handover/generative-ui.md)（现有 widget 系统）
-> 看板功能的技术交接文档待实现后补充
+> 技术实现见 [docs/handover/dashboard.md](../handover/dashboard.md)（看板系统）和 [docs/handover/generative-ui.md](../handover/generative-ui.md)（widget 渲染基础设施）
 
 ## 灵感来源
 
@@ -297,3 +296,116 @@ interface DashboardContext {
 - **P0-P1 不需要引入**：看板核心链路用现有 iframe 渲染够用
 - **P2 值得引入**：导出图片（Canvas + Pretext 高质量生成）、看板布局预计算（消除高度跳动）
 - **远期关键依赖**：服务端看板截图（Bridge 定时推送）的非 DOM 渲染方案
+
+---
+
+## 实现后复盘
+
+> 以下是 P0-P2 全部实现完成后的回顾，包含实际踩坑、设计取舍、以及对未来方向的重新审视。
+
+### 实现状态
+
+| 阶段 | 内容 | 状态 | 备注 |
+|------|------|------|------|
+| P0 | 核心 pin → 展示 → 刷新 | ✅ | MCP 统一路径 |
+| P0 | AI 自动推断数据契约 | ✅ | 在对话上下文中推断 |
+| P1 | MCP 数据源支持 | ✅ | file / mcp_tool / cli 三种 |
+| P1 | 看板 ↔ 对话双向联动 | ✅ | 标题点击 + context 注入 |
+| P1 | 导出图片 | ✅ | Electron 隔离窗口截图 |
+| P1 | AI 主动提议初始看板 | ⏸ 暂缓 | 时机不成熟 |
+| P2 | CLI 数据源 | ✅ | 通过 bash tool 审批执行 |
+| P2 | widget 间联动 | ✅ | pub/sub via postMessage |
+| P2 | 对话式看板操控 | ✅ → 移除 | 输入框多余，聊天统一入口 |
+| P2 | 看板 → Bridge 推送 | ⏸ 暂缓 | |
+
+### 最大的教训：不要改 prompt 格式示例
+
+整个开发过程中最严重的回归不是来自代码逻辑，而是来自修改 `WIDGET_SYSTEM_PROMPT` 中的格式示例。
+
+原始格式块：
+```
+{"title":"snake_case_id","widget_code":"<raw HTML/SVG string>"}
+```
+
+我把 title 从 `"snake_case_id"` 改成 `"Short human-readable title in the user's language"` ——一个看似无害的改动——直接导致 GLM-5-Turbo 模型开始输出各种非标准 fence 格式（单反引号、分离的 json 代码块等），widget 全部渲染为 JSON 代码。
+
+**根因**：模型把格式示例当作"应该长这样"的模板来模仿。当模板中的值从短字符串变成长描述性文本，部分模型会把整个格式块理解为"指导说明"而非"严格模板"，从而在格式执行上放松。
+
+**修复**：还原格式示例，把标题指导放到 rules 列表末尾。同时重写了 widget 解析器为 fence-agnostic（用 JSON brace matching 替代固定 regex），作为防御性改进。
+
+**教训**：对模型行为有影响的 prompt 改动，必须像改数据库 schema 一样谨慎——在目标模型上做 A/B 测试，而不是"看起来合理就改"。
+
+### 安全层面学到的
+
+1. **"只加 CSP"不等于安全**。`connect-src 'none'` 阻断 fetch/XHR/WebSocket，但 `img-src *` 允许通过图片请求信道泄漏数据，`will-navigate` 允许通过 top-level 导航泄漏。安全封堵必须覆盖所有出口通道。
+
+2. **auto-approved MCP 工具不能执行 shell 命令**。即使是在对话上下文中，如果工具内部直接 `execSync()`，用户看到的审批界面只有 widgetId，完全不知道自己批准了什么命令。正确做法：MCP 工具返回命令文本，让模型通过 bash tool（有标准审批流程）执行。
+
+3. **导出 iframe 的 `allow-same-origin` 是个陷阱**。看起来"临时的所以安全"，但 widget 脚本在 finalize 阶段执行时就已经拥有了 parent.document 访问权。最终采用 Electron 隔离 BrowserWindow 方案——独立进程、独立 partition、无 preload、导航阻断。
+
+### iframe 是一种"接近正确但永远有边界的"隔离
+
+这次实现中最花时间的部分不是功能逻辑，而是 iframe 的各种行为边界：
+
+- **排序**：React 重排 keyed 元素会 detach+reattach DOM，对普通 div 无感，但 iframe 会重载。最终用 CSS `order` 解决。
+- **CDN 脚本**：inline script 和 CDN script 的执行时序不可预测。模型生成的代码经常不按 guidelines 写 onload。receiver script 的 CDN 处理逻辑迭代了 5 个版本才稳定。
+- **导出**：sandbox iframe 不能 `contentDocument`，加 `allow-same-origin` 又有安全问题。foreignObject 方案抓不到 canvas 像素。最终转向 Electron native 截图。
+- **高度同步**：`body.scrollHeight` 是唯一可靠的高度来源，但固定高度容器 + content-box 会导致内容溢出底部 padding。
+
+每个问题的最终解都不复杂，但找到它们的过程说明：**iframe 作为隔离边界是一种妥协——它提供的不是完美的隔离，而是"在可接受的成本下足够好的隔离"**。
+
+### 打通以后怎么用
+
+看板的核心价值不在于"展示图表"，而在于**让 AI 持续了解项目状态**。几个高价值场景：
+
+**1. 项目健康监控**
+
+让 AI 生成一组监控 widget——git 提交热力图、dependency 更新状态、test coverage 趋势——pin 到看板。每次打开项目，AI 通过 `<active-dashboard>` 知道这些指标，能在对话中主动提醒"你的 test coverage 这周下降了 3%"。
+
+**2. 外部数据源集成**
+
+配了 Linear/Notion MCP server 的用户可以 pin MCP 数据源 widget。"帮我可视化 Linear 里本周的 bug 统计" → 模型调 Linear MCP tool 获取数据 → 生成图表 → pin 到看板。刷新时模型自动调 MCP tool 获取最新数据。
+
+**3. CLI 输出可视化**
+
+`git log --stat` / `docker ps` / `npm audit` 这类命令输出变成持久化的可视化卡片。开发者不需要记命令、不需要手动看终端输出——AI 把它变成一目了然的图表。
+
+**4. 跨 widget 联动分析**
+
+筛选器 widget + 数据列表 widget 组合使用。点击筛选条件，相关数据自动过滤。这不是写死的联动逻辑，而是 AI 在生成 widget 时用 `__widgetPublish` / `widget-filter` API 实现的动态联动。
+
+### 解决问题的方法论
+
+实现过程中总结的几个原则：
+
+1. **先修根因，再加防御**。widget 渲染问题的根因是 prompt 格式示例被改动，但同时也暴露了解析器过于脆弱。两个都修：还原 prompt（修根因）+ fence-agnostic 解析器（加防御）。
+
+2. **安全是最后验证，不是最后添加**。每个涉及代码执行的路径（iframe sandbox、export window、CLI 刷新）都在实现后被审查出安全问题。应该在设计阶段就列出所有出口通道并逐一封堵。
+
+3. **不要维护两条路径**。最初设计了"API 路由 pin + MCP 对话 pin"两条路径。用户正确指出这增加维护成本和出错可能。统一到 MCP 一条路径后，代码量更少、行为更一致。
+
+4. **DOM 操作要考虑 iframe 的特殊性**。对普通 div 有效的操作（React key 重排、setState 触发 re-render、DOM clone for screenshot）在 iframe 上都可能失效或产生副作用。
+
+### 对未来发展的思考
+
+**看板是 AI agent 的"工作台"，不是用户的"仪表盘"。**
+
+传统仪表盘的设计思路是：用户定义指标 → 系统展示数据 → 用户看数据做决策。这是 human-first 的思路。
+
+AI-first 的看板应该是：**AI 在工作中产出的视觉工件的展示空间**。AI 分析了代码就产出 coverage widget，AI 处理了 issue 就更新 issue 状态 widget，AI 做了 code review 就产出 diff 统计 widget。看板不是用户配置出来的——是 AI 工作过程中自然涌现出来的。
+
+这个方向上还有几个关键的未解问题：
+
+1. **AI 什么时候应该主动更新看板？** 对话中提到了相关数据就更新？每次 check-in 后自动更新？还是只在用户明确要求时更新？目前没有自动更新触发机制。
+
+2. **widget 的生命周期管理**。看板卡片会越来越多，但没有"这个 widget 已经过时了"的检测。需要一种机制让 AI 或用户能识别和清理不再有价值的卡片。
+
+3. **多看板 / 看板视图**。一个项目可能有多个关注维度——代码健康、产品指标、团队协作。当前是单一看板，未来可能需要分组或分页。
+
+4. **widget 的可编辑性**。用户看到 widget 上的数据不对，目前只能在对话中说"帮我改一下"。能否直接在 widget 上双击编辑数值？这涉及到 widget 从"只读展示"变成"可交互表单"的架构转变。
+
+5. **widget 作为 AI 的"视觉记忆"**。当 AI 看到看板上有一个"本周计划"widget，它应该能理解这些计划的完成状态，并在后续对话中主动跟进。这需要 `<active-dashboard>` 注入的内容更丰富——不只是标题和数据契约，可能需要包含 widget 的核心数据摘要。
+
+**最终愿景**：打开一个项目，看板上已经有 AI 根据项目特征自动生成的卡片。开始工作后，AI 在对话中产出的分析自然沉淀到看板。一天结束时，看板是 AI 今天帮你做了什么的视觉记录。第二天打开，AI 看着看板说："昨天你要做的三件事还有一件没完成，要现在继续吗？"
+
+这就是"AI 原生项目控制台"的含义——不是人配置给 AI 看的，是 AI 工作给人看的。
