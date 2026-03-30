@@ -253,6 +253,32 @@ export const QUICK_PRESETS: QuickPreset[] = [
   },
   // ── Media providers ──
   {
+    key: "minimax-media-cn",
+    name: "MiniMax Media (CN)",
+    description: "MiniMax image & video generation — China region",
+    descriptionZh: "MiniMax 图片 & 视频生成 — 中国区",
+    icon: <Minimax size={18} />,
+    provider_type: "minimax-media",
+    protocol: "minimax-media",
+    base_url: "https://api.minimaxi.com",
+    extra_env: '{"MINIMAX_IMAGE_MODEL":"image-01","MINIMAX_VIDEO_MODEL":"MiniMax-Hailuo-2.3"}',
+    fields: ["api_key"],
+    category: "media",
+  },
+  {
+    key: "minimax-media-global",
+    name: "MiniMax Media (Global)",
+    description: "MiniMax image & video generation — Global region",
+    descriptionZh: "MiniMax 图片 & 视频生成 — 国际区",
+    icon: <Minimax size={18} />,
+    provider_type: "minimax-media",
+    protocol: "minimax-media",
+    base_url: "https://api.minimax.io",
+    extra_env: '{"MINIMAX_IMAGE_MODEL":"image-01","MINIMAX_VIDEO_MODEL":"MiniMax-Hailuo-2.3"}',
+    fields: ["api_key"],
+    category: "media",
+  },
+  {
     key: "gemini-image",
     name: "Google Gemini (Image)",
     description: "Nano Banana Pro — AI image generation by Google Gemini",
@@ -268,6 +294,42 @@ export const QUICK_PRESETS: QuickPreset[] = [
 ];
 
 // ---------------------------------------------------------------------------
+// Shared extra_env helper
+// ---------------------------------------------------------------------------
+
+export function getExtraEnvField(provider: ApiProvider, key: string, defaultValue: string): string {
+  try {
+    const env = JSON.parse(provider.extra_env || '{}') as Record<string, string>;
+    return env[key] || defaultValue;
+  } catch {
+    return defaultValue;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// MiniMax Media model definitions
+// ---------------------------------------------------------------------------
+
+export const MINIMAX_IMAGE_MODELS = [
+  { value: 'image-01', label: 'image-01' },
+  { value: 'image-01-dii', label: 'image-01-dii' },
+];
+
+export const MINIMAX_VIDEO_MODELS = [
+  { value: 'MiniMax-Hailuo-2.3', label: 'Hailuo 2.3' },
+  { value: 'MiniMax-Hailuo-2', label: 'Hailuo 2' },
+  { value: 'MiniMax-Hailuo-02-Director', label: 'Hailuo Director' },
+];
+
+export function getMinimaxImageModel(provider: ApiProvider): string {
+  return getExtraEnvField(provider, 'MINIMAX_IMAGE_MODEL', 'image-01');
+}
+
+export function getMinimaxVideoModel(provider: ApiProvider): string {
+  return getExtraEnvField(provider, 'MINIMAX_VIDEO_MODEL', 'MiniMax-Hailuo-2.3');
+}
+
+// ---------------------------------------------------------------------------
 // Gemini image model definitions
 // ---------------------------------------------------------------------------
 
@@ -280,12 +342,7 @@ export const GEMINI_IMAGE_MODELS = [
 export const DEFAULT_GEMINI_IMAGE_MODEL = 'gemini-3.1-flash-image-preview';
 
 export function getGeminiImageModel(provider: ApiProvider): string {
-  try {
-    const env = JSON.parse(provider.extra_env || '{}');
-    return env.GEMINI_IMAGE_MODEL || DEFAULT_GEMINI_IMAGE_MODEL;
-  } catch {
-    return DEFAULT_GEMINI_IMAGE_MODEL;
-  }
+  return getExtraEnvField(provider, 'GEMINI_IMAGE_MODEL', DEFAULT_GEMINI_IMAGE_MODEL);
 }
 
 // ---------------------------------------------------------------------------
@@ -303,6 +360,10 @@ export function findMatchingPreset(provider: ApiProvider): QuickPreset | undefin
   if (provider.provider_type === "vertex") return QUICK_PRESETS.find(p => p.key === "vertex");
   if (provider.provider_type === "openrouter") return QUICK_PRESETS.find(p => p.key === "openrouter");
   if (provider.provider_type === "gemini-image") return QUICK_PRESETS.find(p => p.key === "gemini-image");
+  if (provider.provider_type === "minimax-media") {
+    if (provider.base_url?.includes("minimaxi.com")) return QUICK_PRESETS.find(p => p.key === "minimax-media-cn");
+    return QUICK_PRESETS.find(p => p.key === "minimax-media-global");
+  }
   if (provider.provider_type === "anthropic" && provider.base_url === "https://api.anthropic.com") {
     return QUICK_PRESETS.find(p => p.key === "anthropic-official");
   }

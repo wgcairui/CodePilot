@@ -46,11 +46,19 @@ describe('Provider Catalog', () => {
       assert.equal(kimi.authStyle, 'auth_token');
     });
 
-    it('MiniMax presets use anthropic protocol', () => {
-      const minimax = VENDOR_PRESETS.filter(p => p.key.startsWith('minimax-'));
-      assert.ok(minimax.length >= 2, 'Expected at least 2 MiniMax presets');
-      for (const p of minimax) {
-        assert.equal(p.protocol, 'anthropic', `MiniMax preset ${p.key} should use anthropic protocol`);
+    it('MiniMax chat presets use anthropic protocol', () => {
+      const minimaxChat = VENDOR_PRESETS.filter(p => p.key.startsWith('minimax-') && !p.key.startsWith('minimax-media'));
+      assert.ok(minimaxChat.length >= 2, 'Expected at least 2 MiniMax chat presets');
+      for (const p of minimaxChat) {
+        assert.equal(p.protocol, 'anthropic', `MiniMax chat preset ${p.key} should use anthropic protocol`);
+      }
+    });
+
+    it('MiniMax media presets use minimax-media protocol', () => {
+      const minimaxMedia = VENDOR_PRESETS.filter(p => p.key.startsWith('minimax-media'));
+      assert.ok(minimaxMedia.length >= 2, 'Expected at least 2 MiniMax media presets');
+      for (const p of minimaxMedia) {
+        assert.equal(p.protocol, 'minimax-media', `MiniMax media preset ${p.key} should use minimax-media protocol`);
       }
     });
 

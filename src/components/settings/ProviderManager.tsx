@@ -22,6 +22,10 @@ import {
   QUICK_PRESETS,
   GEMINI_IMAGE_MODELS,
   getGeminiImageModel,
+  MINIMAX_IMAGE_MODELS,
+  MINIMAX_VIDEO_MODELS,
+  getMinimaxImageModel,
+  getMinimaxVideoModel,
   getProviderIcon,
   findMatchingPreset,
   type QuickPreset,
@@ -68,6 +72,19 @@ export function ProviderManager() {
 
   // Doctor dialog state
   const [doctorOpen, setDoctorOpen] = useState(false);
+
+  // MiniMax quota state: { [providerId]: { loading, models, error } }
+  const [minimaxQuotas, setMinimaxQuotas] = useState<Record<string, {
+    loading: boolean;
+    models?: Array<{
+      modelName: string;
+      weeklyRemains: number; weeklyTotal: number;
+      weeklyStartTime?: number; weeklyEndTime?: number; weeklyRemainsMs?: number;
+      intervalRemains: number; intervalTotal: number;
+      intervalStartTime?: number; intervalEndTime?: number; intervalRemainsMs?: number;
+    }>;
+    error?: string;
+  }>>({});
 
   // Global default model state
   const [providerGroups, setProviderGroups] = useState<ProviderModelGroup[]>([]);
@@ -190,11 +207,14 @@ export function ProviderManager() {
     }
   };
 
-  const handleImageModelChange = useCallback(async (provider: ApiProvider, model: string) => {
+  const handleEnvModelChange = useCallback(async (
+    provider: ApiProvider,
+    field: string,
+    value: string,
+  ) => {
     try {
-      const env = JSON.parse(provider.extra_env || '{}');
-      env.GEMINI_IMAGE_MODEL = model;
-      const newExtraEnv = JSON.stringify(env);
+      const env = JSON.parse(provider.extra_env || '{}') as Record<string, string>;
+      env[field] = value;
       const res = await fetch(`/api/providers/${provider.id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -203,7 +223,7 @@ export function ProviderManager() {
           provider_type: provider.provider_type,
           base_url: provider.base_url,
           api_key: provider.api_key,
-          extra_env: newExtraEnv,
+          extra_env: JSON.stringify(env),
           notes: provider.notes,
         }),
       });
@@ -214,6 +234,171 @@ export function ProviderManager() {
       }
     } catch { /* ignore */ }
   }, []);
+
+  const fetchMinimaxQuota = useCallback(async (providerId: string) => {
+    setMinimaxQuotas(prev => ({ ...prev, [providerId]: { loading: true } }));
+    try {
+      const res = await fetch(`/api/providers/${providerId}/quota`);
+      const data = await res.json();
+      if (!res.ok) {
+        setMinimaxQuotas(prev => ({ ...prev, [providerId]: { loading: false, error: data.error || 'Failed' } }));
+        return;
+      }
+      setMinimaxQuotas(prev => ({
+        ...prev,
+        [providerId]: {
+          loading: false,
+          models: (data.models ?? []) as Array<{
+            modelName: string;
+            weeklyRemains: number; weeklyTotal: number;
+            weeklyStartTime?: number; weeklyEndTime?: number; weeklyRemainsMs?: number;
+            intervalRemains: number; intervalTotal: number;
+            intervalStartTime?: number; intervalEndTime?: number; intervalRemainsMs?: number;
+          }>,
+        },
+      }));
+    } catch (err) {
+      setMinimaxQuotas(prev => ({
+        ...prev,
+        [providerId]: { loading: false, error: err instanceof Error ? err.message : 'Failed' },
+      }));
+    }
+  }, []);
+
+  // Renders the MiniMax quota block for a given provider.
+  // filterFn narrows which models to show (undefined = show all).
+  const renderMinimaxQuota = useCallback((
+    providerId: string,
+    filterFn?: (m: { modelName: string; weeklyRemains: number; weeklyTotal: number; intervalRemains: number; intervalTotal: number }) => boolean,
+  ) => {
+    const q = minimaxQuotas[providerId];
+    if (!q) {
+      return (
+        <div className="flex items-center mt-1">
+          <Button
+            variant="ghost"
+            size="sm"
+            className="text-[11px] text-muted-foreground h-auto px-2 py-0.5"
+            onClick={() => fetchMinimaxQuota(providerId)}
+          >
+            {isZh ? '查看配额' : 'Check quota'}
+          </Button>
+        </div>
+      );
+    }
+    if (q.loading) {
+      return <p className="text-[11px] text-muted-foreground mt-1">{isZh ? '加载中…' : 'Loading…'}</p>;
+    }
+    if (q.error) {
+      return (
+        <div className="flex items-center gap-1 mt-1">
+          <span className="text-[11px] text-destructive">{q.error}</span>
+          <Button variant="ghost" size="sm" className="text-[11px] h-auto px-1.5 py-0.5" onClick={() => fetchMinimaxQuota(providerId)}>
+            {isZh ? '重试' : 'Retry'}
+          </Button>
+        </div>
+      );
+    }
+    // Filter: exclude models where both weekly and interval total are 0 (not in plan)
+    const baseModels = (q.models ?? []).filter(m => m.weeklyTotal > 0 || m.intervalTotal > 0);
+    const visibleModels = filterFn ? baseModels.filter(filterFn) : baseModels;
+    if (visibleModels.length === 0) {
+      return (
+        <div className="flex items-center gap-1 mt-1">
+          <span className="text-[11px] text-muted-foreground">{isZh ? '暂无相关配额数据' : 'No quota data'}</span>
+          <Button variant="ghost" size="sm" className="text-[11px] h-auto px-1.5 py-0.5 text-muted-foreground" onClick={() => fetchMinimaxQuota(providerId)}>
+            {isZh ? '刷新' : 'Refresh'}
+          </Button>
+        </div>
+      );
+    }
+    // Format a ms timestamp as HH:mm (UTC+8)
+    const fmtTime = (ms: number) => {
+      const d = new Date(ms + 8 * 3600_000); // shift to UTC+8
+      const h = String(d.getUTCHours()).padStart(2, '0');
+      const min = String(d.getUTCMinutes()).padStart(2, '0');
+      return `${h}:${min}`;
+    };
+    // Format ms duration as "X 小时 Y 分钟" / "Xh Ym"
+    const fmtRemains = (ms: number) => {
+      const totalMin = Math.ceil(ms / 60_000);
+      const h = Math.floor(totalMin / 60);
+      const m = totalMin % 60;
+      if (isZh) return h > 0 ? `${h} 小时 ${m} 分钟后重置` : `${m} 分钟后重置`;
+      return h > 0 ? `resets in ${h}h ${m}m` : `resets in ${m}m`;
+    };
+
+    return (
+      <div className="mt-2 space-y-2.5">
+        {visibleModels.map(m => {
+          const periods: Array<{
+            label: string; used: number; total: number;
+            startTime?: number; endTime?: number; remainsMs?: number;
+          }> = [];
+          if (m.intervalTotal > 0) {
+            periods.push({
+              label: isZh ? '周期' : 'Interval',
+              used: m.intervalTotal - m.intervalRemains,
+              total: m.intervalTotal,
+              startTime: m.intervalStartTime,
+              endTime: m.intervalEndTime,
+              remainsMs: m.intervalRemainsMs,
+            });
+          }
+          if (m.weeklyTotal > 0) {
+            periods.push({
+              label: isZh ? '本周' : 'Weekly',
+              used: m.weeklyTotal - m.weeklyRemains,
+              total: m.weeklyTotal,
+              startTime: m.weeklyStartTime,
+              endTime: m.weeklyEndTime,
+              remainsMs: m.weeklyRemainsMs,
+            });
+          }
+          return (
+            <div key={m.modelName}>
+              <p className="text-[11px] font-medium mb-1 text-foreground">{m.modelName}</p>
+              <div className="rounded-md bg-muted/40 px-2.5 py-2 space-y-2">
+                {periods.map(p => {
+                  const pct = p.total > 0 ? Math.round((p.used / p.total) * 100) : 0;
+                  return (
+                    <div key={p.label}>
+                      <div className="flex items-center justify-between text-[10px] mb-0.5">
+                        <span className="font-medium text-primary">{p.label}</span>
+                        <span className="text-muted-foreground">
+                          {p.used.toLocaleString()}/{p.total.toLocaleString()}
+                          <span className="ml-1.5">{pct}%</span>
+                        </span>
+                      </div>
+                      {(p.startTime || p.remainsMs) && (
+                        <div className="flex items-center justify-between text-[10px] text-muted-foreground mb-1">
+                          {p.startTime && p.endTime
+                            ? <span>{fmtTime(p.startTime)}-{fmtTime(p.endTime)}(UTC+8)</span>
+                            : <span />}
+                          {p.remainsMs
+                            ? <span>{fmtRemains(p.remainsMs)}</span>
+                            : null}
+                        </div>
+                      )}
+                      <div className="h-[3px] rounded-full bg-primary/15 overflow-hidden">
+                        <div
+                          className="h-full rounded-full bg-primary/55"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+        <Button variant="ghost" size="sm" className="text-[11px] h-auto px-0 py-0.5 text-muted-foreground" onClick={() => fetchMinimaxQuota(providerId)}>
+          {isZh ? '刷新' : 'Refresh'}
+        </Button>
+      </div>
+    );
+  }, [minimaxQuotas, fetchMinimaxQuota, isZh]);
 
   const sorted = [...providers].sort((a, b) => a.sort_order - b.sort_order);
 
@@ -420,7 +605,7 @@ export function ProviderManager() {
                           key={m.value}
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleImageModelChange(provider, m.value)}
+                          onClick={() => handleEnvModelChange(provider, 'GEMINI_IMAGE_MODEL', m.value)}
                           className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium border h-auto ${
                             isActive
                               ? 'bg-primary/10 text-primary border-primary/30'
@@ -431,6 +616,66 @@ export function ProviderManager() {
                         </Button>
                       );
                     })}
+                  </div>
+                )}
+                {/* MiniMax Chat provider quota (shows all models) */}
+                {provider.provider_type !== 'minimax-media' &&
+                  (provider.base_url?.includes('minimaxi.com') || provider.base_url?.includes('minimax.io')) && (
+                  <div className="ml-[34px] mt-1.5">
+                    {renderMinimaxQuota(provider.id)}
+                  </div>
+                )}
+                {/* MiniMax Media model selectors + quota */}
+                {provider.provider_type === 'minimax-media' && (
+                  <div className="ml-[34px] mt-2 space-y-1.5">
+                    {/* Image model */}
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[11px] text-muted-foreground w-16">{isZh ? '图片模型' : 'Image'}:</span>
+                      {MINIMAX_IMAGE_MODELS.map((m) => {
+                        const isActive = getMinimaxImageModel(provider) === m.value;
+                        return (
+                          <Button
+                            key={m.value}
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEnvModelChange(provider, 'MINIMAX_IMAGE_MODEL', m.value)}
+                            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium border h-auto ${
+                              isActive
+                                ? 'bg-primary/10 text-primary border-primary/30'
+                                : 'text-muted-foreground border-border/60 hover:text-foreground hover:border-foreground/30 hover:bg-accent/50'
+                            }`}
+                          >
+                            {m.label}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                    {/* Video model */}
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[11px] text-muted-foreground w-16">{isZh ? '视频模型' : 'Video'}:</span>
+                      {MINIMAX_VIDEO_MODELS.map((m) => {
+                        const isActive = getMinimaxVideoModel(provider) === m.value;
+                        return (
+                          <Button
+                            key={m.value}
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleEnvModelChange(provider, 'MINIMAX_VIDEO_MODEL', m.value)}
+                            className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-medium border h-auto ${
+                              isActive
+                                ? 'bg-primary/10 text-primary border-primary/30'
+                                : 'text-muted-foreground border-border/60 hover:text-foreground hover:border-foreground/30 hover:bg-accent/50'
+                            }`}
+                          >
+                            {m.label}
+                          </Button>
+                        );
+                      })}
+                    </div>
+                    {/* Quota row — image + video models */}
+                    {renderMinimaxQuota(provider.id, m =>
+                      m.modelName.startsWith('image-') || m.modelName.startsWith('MiniMax-Hailuo'),
+                    )}
                   </div>
                 )}
               </div>

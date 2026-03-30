@@ -301,7 +301,9 @@ export async function start(): Promise<StartResult> {
       console.log(`[bridge-manager] Started adapter: ${type}`);
       startedCount++;
     } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : String(err);
       console.error(`[bridge-manager] Failed to start adapter ${type}:`, err);
+      state.adapterMeta.set(type, { lastMessageAt: null, lastError: errorMsg });
     }
   }
 

@@ -16,6 +16,8 @@ export interface ImageGenState {
 export interface ImageGenContextValue {
   state: ImageGenState;
   setEnabled: (v: boolean) => void;
+  mediaProviderId: string | null;
+  setMediaProviderId: (id: string | null) => void;
   generate: (prompt: string, aspectRatio: string, imageSize: string, referenceImages?: File[]) => Promise<ImageGenResult | null>;
   lastResult: ImageGenResult | null;
 }
@@ -34,7 +36,14 @@ export function useImageGenState(): ImageGenContextValue {
   const [enabled, setEnabled] = useState(false);
   const [generating, setGenerating] = useState(false);
   const [lastResult, setLastResult] = useState<ImageGenResult | null>(null);
+  const [mediaProviderId, setMediaProviderId] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
+  const mediaProviderIdRef = useRef<string | null>(null);
+
+  const wrappedSetMediaProviderId = useCallback((id: string | null) => {
+    mediaProviderIdRef.current = id;
+    setMediaProviderId(id);
+  }, []);
 
   const generate = useCallback(async (prompt: string, aspectRatio: string, imageSize: string, referenceImages?: File[]): Promise<ImageGenResult | null> => {
     if (abortRef.current) {
@@ -49,6 +58,7 @@ export function useImageGenState(): ImageGenContextValue {
         prompt,
         aspectRatio,
         imageSize,
+        ...(mediaProviderIdRef.current ? { providerId: mediaProviderIdRef.current } : {}),
       };
 
       if (referenceImages && referenceImages.length > 0) {
@@ -102,6 +112,8 @@ export function useImageGenState(): ImageGenContextValue {
   return {
     state: { enabled, generating },
     setEnabled,
+    mediaProviderId,
+    setMediaProviderId: wrappedSetMediaProviderId,
     generate,
     lastResult,
   };

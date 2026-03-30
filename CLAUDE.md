@@ -1,5 +1,7 @@
 # CLAUDE.md
 
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 CodePilot — Claude Code 的桌面 GUI 客户端，基于 Electron + Next.js。
 
 > 架构细节见 [ARCHITECTURE.md](./ARCHITECTURE.md)，本文件只包含规则和流程。
@@ -44,11 +46,59 @@ CodePilot — Claude Code 的桌面 GUI 客户端，基于 Electron + Next.js。
 
 **自检命令（pre-commit hook 会自动执行前三项）：**
 - `npm run test` — typecheck + 单元测试（~4s，无需 dev server）
+- `npm run test:unit` — 仅跑单元测试（跳过 typecheck）
 - `npm run test:smoke` — 冒烟测试（~15s，需要 dev server）
 - `npm run test:e2e` — 完整 E2E（~60s+，需要 dev server）
+- `npm run lint` — ESLint 检查
+- `npm run lint:colors` — ⚠️ 检查是否使用了原始 Tailwind 颜色（见下方颜色规则）
+
+**单个测试文件：**
+```
+npx tsx --test src/__tests__/unit/foo.test.ts
+```
 
 修改代码后，commit 前至少确保 `npm run test` 通过。
 涉及 UI 改动时额外运行 `npm run test:smoke`。
+
+## ⚠️ 非显而易见规则
+
+**颜色命名约束（`lint:colors` 会检查）：**
+- 禁止在组件中使用原始 Tailwind 颜色，如 `text-green-500`、`bg-red-600`
+- 必须使用语义 token，如 `text-status-success`、`bg-destructive`
+- 例外：在 `src/components/ui/` 和 `src/components/ai-elements/` 内可用（已豁免）
+- 行内注释 `// lint-allow-raw-color` 可对单行豁免
+
+**Dashboard 配置存文件系统，不在 SQLite：**
+- 位置：`{工作目录}/.codepilot/dashboard/dashboard.json`（每个项目独立）
+- 代码：`src/lib/dashboard-store.ts`（读写）、`src/lib/dashboard-cli-reader.ts`（CLI 数据读取）
+
+**Widget 系统（AI 生成的交互式卡片）：**
+- `src/lib/widget-css-bridge.ts` — 把 CodePilot OKLCH token 映射为 widget 可用的 CSS 变量
+- `src/lib/widget-sanitizer.ts` — 对 AI 生成 HTML 做 DOMPurify 白名单过滤
+- `src/lib/widget-guidelines.ts` — 生成给模型的 widget 编写规范 prompt
+- Widget HTML 在 `.widget-root` 作用域内运行，有独立 Tailwind-like 工具类
+
+**数据目录：**
+- 默认：`~/.codepilot/`（数据库、缓存等）
+- 可用 `CLAUDE_GUI_DATA_DIR` 环境变量覆盖（本地调试时有用）
+
+**新增 provider 类型时需同步四处（⚠️ 容易漏）：**
+- `src/lib/provider-catalog.ts` — 后端 vendor preset 注册（`VENDOR_PRESETS`、`Protocol` 类型）
+- `src/components/settings/provider-presets.tsx` — 前端 `QUICK_PRESETS` 注册
+- `src/components/settings/ProviderManager.tsx` — 如需特殊 UI（模型选择器、quota 等）
+- `src/__tests__/unit/provider-resolver.test.ts` — 更新协议断言
+
+**TypeScript `isolatedModules` 规则：**
+- 重导出类型必须用 `export type`，否则构建报错（见 `src/lib/image-generator.ts`）
+
+**Gallery 原生支持视频：**
+- `GalleryGrid` 和 `GalleryDetail` 已有 `<video>` 渲染分支，添加视频功能无需改 Gallery
+
+**Next.js 15 动态路由参数是 Promise：**
+- `params` 必须 `const { id } = await context.params`（不能直接解构）
+
+**`/api/providers` 返回的 api_key 是 masked（`***...`）：**
+- 前端无法直接读取原始 key；需调用专用端点或后端复制逻辑
 
 ## 改动自查
 
