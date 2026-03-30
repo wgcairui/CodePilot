@@ -64,7 +64,7 @@ export class MinimaxMediaProvider implements MediaProvider {
     }
 
     const json = await res.json() as {
-      data?: { image_base64?: string };
+      data?: { image_base64?: string | string[] };
       base_resp?: { status_code: number; status_msg: string };
     };
 
@@ -72,14 +72,16 @@ export class MinimaxMediaProvider implements MediaProvider {
       throw new Error(`MiniMax image error ${json.base_resp.status_code}: ${json.base_resp.status_msg}`);
     }
 
-    const base64 = json.data?.image_base64;
-    if (!base64) throw new Error('MiniMax returned no image data');
+    // MiniMax returns image_base64 as an array (even for a single image)
+    const raw = json.data?.image_base64;
+    const base64List: string[] = Array.isArray(raw) ? raw : (raw ? [raw] : []);
+    if (base64List.length === 0) throw new Error('MiniMax returned no image data');
 
     const elapsed = Date.now() - startTime;
     console.log(`[minimax-media] image ${model} completed in ${elapsed}ms`);
 
     return {
-      images: [{ mimeType: 'image/jpeg', data: Buffer.from(base64, 'base64') }],
+      images: base64List.map(b64 => ({ mimeType: 'image/jpeg', data: Buffer.from(b64, 'base64') })),
       model,
       elapsedMs: elapsed,
     };
