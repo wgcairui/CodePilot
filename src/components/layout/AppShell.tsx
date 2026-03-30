@@ -22,6 +22,7 @@ import { getActiveSessionIds, getSnapshot } from "@/lib/stream-session-manager";
 import { useGitStatus } from "@/hooks/useGitStatus";
 import { SetupCenter } from '@/components/setup/SetupCenter';
 import { Toaster } from '@/components/ui/toast';
+import { TerminalDrawer } from '@/components/terminal/TerminalDrawer';
 
 const SPLIT_SESSIONS_KEY = "codepilot:split-sessions";
 const SPLIT_ACTIVE_COLUMN_KEY = "codepilot:split-active-column";
@@ -442,6 +443,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                       <ErrorBoundary>{children}</ErrorBoundary>
                     )}
                   </main>
+                  <TerminalDrawer />
                 </div>
                 {isChatDetailRoute && <PanelZone />}
               </div>

@@ -91,6 +91,12 @@ npx tsx --test src/__tests__/unit/foo.test.ts
 **TypeScript `isolatedModules` 规则：**
 - 重导出类型必须用 `export type`，否则构建报错（见 `src/lib/image-generator.ts`）
 
+**终端组件（已接入 UI）：**
+- `src/components/terminal/TerminalDrawer.tsx` — 底部终端抽屉，挂载于 AppShell
+- `src/hooks/useTerminal.ts` — PTY 生命周期管理（create/write/resize/kill）
+- 按钮在 `UnifiedTopBar.tsx`，通过 `PanelContext.terminalOpen` 控制显隐
+- 仅 Electron 环境有完整功能；浏览器显示"终端仅在桌面应用中可用"
+
 **Gallery 原生支持视频：**
 - `GalleryGrid` 和 `GalleryDetail` 已有 `<video>` 渲染分支，添加视频功能无需改 Gallery
 
