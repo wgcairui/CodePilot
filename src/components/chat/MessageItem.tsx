@@ -10,7 +10,7 @@ import {
 import { ToolActionsGroup } from '@/components/ai-elements/tool-actions-group';
 import { MediaPreview } from './MediaPreview';
 import { Button } from "@/components/ui/button";
-import { Copy, Check, CaretDown, CaretUp, PushPin, DownloadSimple } from "@/components/ui/icon";
+import { Copy, Check, CaretDown, CaretUp, PushPin, DownloadSimple, ChartBar } from "@/components/ui/icon";
 import { FileAttachmentDisplay } from './FileAttachmentDisplay';
 import { ImageGenConfirmation } from './ImageGenConfirmation';
 import { ImageGenCard } from './ImageGenCard';
@@ -467,6 +467,57 @@ function parseMessageFiles(content: string): { files: FileAttachment[]; text: st
   }
 }
 
+/**
+ * Detects if an assistant message contains content worth visualizing
+ * (flowcharts, tables, numbered steps, data-heavy outputs).
+ * Used to show a "可视化" quick-action in the message footer.
+ */
+function detectVisualizableContent(text: string): boolean {
+  if (text.includes('show-widget')) return false; // already a widget
+  if (text.length < 150) return false;
+
+  // Flowchart / pipeline: 4+ directional arrows
+  const arrows = (text.match(/→|↓|↑|->|==>|──►/g) || []).length;
+  if (arrows >= 4) return true;
+
+  // Markdown table (header separator row present)
+  if (/\|[-:\s]+\|/.test(text)) return true;
+
+  // Numbered process: 4+ ordered list items
+  const numberedItems = (text.match(/^\s*\d+\./gm) || []).length;
+  if (numberedItems >= 4) return true;
+
+  return false;
+}
+
+/** "可视化" button — sends the message content to AI to render as a widget. */
+function VisualizeButton({ messageContent }: { messageContent: string }) {
+  const [cooldown, setCooldown] = useState(false);
+
+  const handleVisualize = useCallback(() => {
+    if (cooldown) return;
+    setCooldown(true);
+    window.dispatchEvent(new CustomEvent('widget-visualize-request', {
+      detail: { content: messageContent.slice(0, 3000) },
+    }));
+    setTimeout(() => setCooldown(false), 5000);
+  }, [cooldown, messageContent]);
+
+  return (
+    <Button
+      variant="ghost"
+      size="sm"
+      onClick={handleVisualize}
+      disabled={cooldown}
+      className="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs text-muted-foreground/60 hover:text-muted-foreground h-auto"
+      title="转为可视化图表"
+    >
+      <ChartBar size={12} />
+      <span>可视化</span>
+    </Button>
+  );
+}
+
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false);
 
@@ -642,6 +693,9 @@ export const MessageItem = memo(function MessageItem({ message, sessionId }: Mes
       <div className={`flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 ${isUser ? 'justify-end' : ''}`}>
         {!isUser && <span className="text-xs text-muted-foreground/50">{timestamp}</span>}
         {!isUser && tokenUsage && <TokenUsageDisplay usage={tokenUsage} />}
+        {!isUser && displayText && detectVisualizableContent(displayText) && (
+          <VisualizeButton messageContent={displayText} />
+        )}
         {displayText && <CopyButton text={displayText} />}
       </div>
     </AIMessage>
@@ -657,6 +711,7 @@ function PinnableWidget({ widgetCode, title }: {
 }) {
   const [cooldown, setCooldown] = useState(false);
   const { workingDirectory } = usePanel();
+  const isElectron = typeof window !== 'undefined' && !!window.electronAPI?.widget?.exportPng;
 
   const handlePin = useCallback(() => {
     if (cooldown || !workingDirectory) return;
@@ -690,12 +745,14 @@ function PinnableWidget({ widgetCode, title }: {
           Pin
         </button>
       )}
-      <button
-        className="text-[10px] px-1.5 py-0.5 rounded text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/50 flex items-center gap-0.5"
-        onClick={handleExport}
-      >
-        <DownloadSimple size={12} />
-      </button>
+      {isElectron && (
+        <button
+          className="text-[10px] px-1.5 py-0.5 rounded text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/50 flex items-center gap-0.5"
+          onClick={handleExport}
+        >
+          <DownloadSimple size={12} />
+        </button>
+      )}
     </>
   );
 

@@ -68,34 +68,26 @@ npx tsx --test src/__tests__/unit/foo.test.ts
 - 例外：在 `src/components/ui/` 和 `src/components/ai-elements/` 内可用（已豁免）
 - 行内注释 `// lint-allow-raw-color` 可对单行豁免
 
-**Dashboard 配置存文件系统，不在 SQLite：**
-- 位置：`{工作目录}/.codepilot/dashboard/dashboard.json`（每个项目独立）
-- 代码：`src/lib/dashboard-store.ts`（读写）、`src/lib/dashboard-cli-reader.ts`（CLI 数据读取）
-
-**Widget 系统（AI 生成的交互式卡片）：**
-- `src/lib/widget-css-bridge.ts` — 把 CodePilot OKLCH token 映射为 widget 可用的 CSS 变量
-- `src/lib/widget-sanitizer.ts` — 对 AI 生成 HTML 做 DOMPurify 白名单过滤
-- `src/lib/widget-guidelines.ts` — 生成给模型的 widget 编写规范 prompt
+**Dashboard / Widget 系统：** 见 [`src/lib/CLAUDE.md`](./src/lib/CLAUDE.md)
+- ⚠️ Dashboard 配置存**文件系统**不在 SQLite：`{workDir}/.codepilot/dashboard/dashboard.json`
+- ⚠️ Pin 操作不直接写文件 — 先发消息给 AI，AI 调用 MCP tool 写入（保留对话上下文推断元数据）
 - Widget HTML 在 `.widget-root` 作用域内运行，有独立 Tailwind-like 工具类
 
 **数据目录：**
 - 默认：`~/.codepilot/`（数据库、缓存等）
 - 可用 `CLAUDE_GUI_DATA_DIR` 环境变量覆盖（本地调试时有用）
 
-**新增 provider 类型时需同步四处（⚠️ 容易漏）：**
-- `src/lib/provider-catalog.ts` — 后端 vendor preset 注册（`VENDOR_PRESETS`、`Protocol` 类型）
-- `src/components/settings/provider-presets.tsx` — 前端 `QUICK_PRESETS` 注册
-- `src/components/settings/ProviderManager.tsx` — 如需特殊 UI（模型选择器、quota 等）
-- `src/__tests__/unit/provider-resolver.test.ts` — 更新协议断言
+**新增 provider 类型：** 见 [`src/lib/CLAUDE.md`](./src/lib/CLAUDE.md)（需同步四处）
 
 **TypeScript `isolatedModules` 规则：**
 - 重导出类型必须用 `export type`，否则构建报错（见 `src/lib/image-generator.ts`）
 
-**终端组件（已接入 UI）：**
-- `src/components/terminal/TerminalDrawer.tsx` — 底部终端抽屉，挂载于 AppShell
-- `src/hooks/useTerminal.ts` — PTY 生命周期管理（create/write/resize/kill）
-- 按钮在 `UnifiedTopBar.tsx`，通过 `PanelContext.terminalOpen` 控制显隐
-- 仅 Electron 环境有完整功能；浏览器显示"终端仅在桌面应用中可用"
+**布局 / Panel / 终端系统：** 见 [`src/components/layout/CLAUDE.md`](./src/components/layout/CLAUDE.md)
+- ⚠️ 新增面板开关需同步三处：`usePanel.ts`（接口）+ `AppShell.tsx`（Provider state）+ `UnifiedTopBar.tsx`（按钮）
+- 终端仅 Electron 有完整 PTY 功能
+
+**Git 面板：** 见 [`src/components/git/CLAUDE.md`](./src/components/git/CLAUDE.md)
+- `GitChangedFile.staged` 已区分暂存/工作区；i18n 已有 `git.staged`/`git.unstaged`
 
 **Gallery 原生支持视频：**
 - `GalleryGrid` 和 `GalleryDetail` 已有 `<video>` 渲染分支，添加视频功能无需改 Gallery
@@ -129,11 +121,7 @@ npx tsx --test src/__tests__/unit/foo.test.ts
    - 未来可能的方向和已知的局限性
    - 目标读者：产品决策者，需要能理解设计背后的"为什么"
 
-**两份文档必须互相反向链接：**
-- 交接文档开头：`> 产品思考见 [docs/insights/xxx.md](../insights/xxx.md)`
-- 产品文档开头：`> 技术实现见 [docs/handover/xxx.md](../handover/xxx.md)`
-
-**文件命名保持一致**（如 `cli-tools.md`），方便对照查找。
+**两份文档必须互相反向链接，文件命名保持一致**（如 `cli-tools.md`）。
 
 ## 发版
 
@@ -143,53 +131,7 @@ npx tsx --test src/__tests__/unit/foo.test.ts
 
 **构建：** macOS 产出 DMG（arm64 + x64），Windows 产出 NSIS 安装包。`scripts/after-pack.js` 重编译 better-sqlite3 为 Electron ABI。构建前清理 `rm -rf release/ .next/`。
 
-**Release Notes 格式（必须严格遵循）：**
-
-标题：`CodePilot v{版本号}`
-
-正文结构：
-
-```markdown
-## CodePilot v{版本号}
-
-> 一句话版本摘要，说明这个版本的核心主题或推荐升级理由。
-
-### 新增功能
-- 功能描述（面向用户的语言，不要写 commit hash）
-
-### 修复问题
-- 修复了 xxx 的问题
-
-### 优化改进
-- 优化了 xxx
-
-## 下载地址
-
-### macOS
-- [Apple Silicon (M1/M2/M3/M4)](https://github.com/op7418/CodePilot/releases/download/v{版本号}/CodePilot-{版本号}-arm64.dmg)
-- [Intel](https://github.com/op7418/CodePilot/releases/download/v{版本号}/CodePilot-{版本号}-x64.dmg)
-
-### Windows
-- [Windows 安装包](https://github.com/op7418/CodePilot/releases/download/v{版本号}/CodePilot-Setup-{版本号}.exe)
-
-## 安装说明
-
-**macOS**: 下载 DMG → 拖入 Applications → 首次启动如遇安全提示，在系统设置 > 隐私与安全中点击"仍要打开"
-**Windows**: 下载 exe 安装包 → 双击安装
-
-## 系统要求
-
-- macOS 12.0+ / Windows 10+ / Linux (glibc 2.31+)
-- 需要配置 API 服务商（Anthropic / OpenRouter 等）
-- 推荐安装 Claude Code CLI 以获得完整功能
-```
-
-**Release Notes 写作规则：**
-- 更新内容必须用用户能理解的语言，不要出现 commit hash、函数名、文件路径
-- 每个条目说清楚"用户能感知到什么变化"
-- 下载链接必须是完整的 GitHub release download URL，用户点击即可下载
-- 如果某个分类没有内容（如没有修复），跳过该分类不要留空标题
-- `git log --oneline` 的输出只用于自己梳理，不要原样复制到 Release Notes
+**Release Notes 格式：** 见 [`docs/release-notes-template.md`](./docs/release-notes-template.md)（严格遵循模板和写作规则）
 
 ## 执行计划
 

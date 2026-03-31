@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { GitBranch, GitCommit, CloudArrowUp, ArrowUp, ArrowLeft, Circle } from "@/components/ui/icon";
+import { GitBranch, GitCommit, CloudArrowUp, ArrowUp, ArrowLeft, Plus, Minus, ArrowsCounterClockwise, Trash } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "@/hooks/useTranslation";
 import { usePanel } from "@/hooks/usePanel";
@@ -85,12 +85,13 @@ export function GitStatusSection({ status }: GitStatusSectionProps) {
         </div>
       )}
 
-      {/* Changed files — show tracked changes first, untracked separately */}
+      {/* Changed files — grouped by staging area / workspace */}
       {(() => {
-        const tracked = status.changedFiles.filter(f => f.status !== 'untracked');
-        const untracked = status.changedFiles.filter(f => f.status === 'untracked');
+        const staged = status.changedFiles.filter(f => f.staged);
+        // Unstaged includes both tracked unstaged + untracked
+        const unstaged = status.changedFiles.filter(f => !f.staged);
 
-        if (tracked.length === 0 && untracked.length === 0) {
+        if (staged.length === 0 && unstaged.length === 0) {
           return (
             <div className="px-3 py-2 text-xs text-muted-foreground">
               {t('git.allCommitted')}
@@ -98,28 +99,29 @@ export function GitStatusSection({ status }: GitStatusSectionProps) {
           );
         }
 
+        const refresh = () => window.dispatchEvent(new CustomEvent('git-refresh'));
         return (
           <div className="space-y-2">
-            {tracked.length > 0 && (
+            {staged.length > 0 && (
               <div className="space-y-1">
-                <div className="px-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  {t('git.dirty', { count: String(tracked.length) })}
+                <div className="px-3 text-[11px] font-semibold uppercase tracking-wider text-green-600 dark:text-green-400">
+                  {t('git.staged')} ({staged.length})
                 </div>
-                <div className="max-h-[200px] overflow-y-auto">
-                  {tracked.map((file, i) => (
-                    <FileChangeItem key={`${file.path}-${file.staged}-${i}`} file={file} />
+                <div className="max-h-[180px] overflow-y-auto">
+                  {staged.map((file, i) => (
+                    <FileChangeItem key={`staged-${file.path}-${i}`} file={file} cwd={workingDirectory} onRefresh={refresh} />
                   ))}
                 </div>
               </div>
             )}
-            {untracked.length > 0 && (
+            {unstaged.length > 0 && (
               <div className="space-y-1">
                 <div className="px-3 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
-                  {t('git.untracked', { count: String(untracked.length) })}
+                  {t('git.unstaged')} ({unstaged.length})
                 </div>
-                <div className="max-h-[120px] overflow-y-auto">
-                  {untracked.map((file, i) => (
-                    <FileChangeItem key={`${file.path}-untracked-${i}`} file={file} />
+                <div className="max-h-[180px] overflow-y-auto">
+                  {unstaged.map((file, i) => (
+                    <FileChangeItem key={`unstaged-${file.path}-${i}`} file={file} cwd={workingDirectory} onRefresh={refresh} />
                   ))}
                 </div>
               </div>
@@ -162,7 +164,15 @@ export function GitStatusSection({ status }: GitStatusSectionProps) {
   );
 }
 
-function FileChangeItem({ file }: { file: GitChangedFile }) {
+interface FileChangeItemProps {
+  file: GitChangedFile;
+  cwd: string;
+  onRefresh: () => void;
+}
+
+function FileChangeItem({ file, cwd, onRefresh }: FileChangeItemProps) {
+  const [loading, setLoading] = useState(false);
+
   const statusColors: Record<string, string> = {
     modified: 'text-amber-500',
     added: 'text-green-500',
@@ -181,15 +191,100 @@ function FileChangeItem({ file }: { file: GitChangedFile }) {
     untracked: '?',
   };
 
+  const callApi = useCallback(async (endpoint: string, body: Record<string, unknown>) => {
+    if (loading || !cwd) return;
+    setLoading(true);
+    try {
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ cwd, path: file.path, ...body }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        showToast({ type: 'error', message: data.error || 'Operation failed' });
+        return;
+      }
+      onRefresh();
+    } catch (err) {
+      showToast({ type: 'error', message: err instanceof Error ? err.message : 'Operation failed' });
+    } finally {
+      setLoading(false);
+    }
+  }, [loading, cwd, file.path, onRefresh]);
+
+  const handleStage = () => callApi('/api/git/stage', {});
+  const handleUnstage = () => callApi('/api/git/unstage', {});
+  const handleDiscard = () => {
+    const isUntracked = file.status === 'untracked';
+    const msg = isUntracked
+      ? `删除未跟踪文件 "${file.path}"？此操作不可撤销。`
+      : `撤销 "${file.path}" 的修改？未提交的改动将丢失。`;
+    if (!window.confirm(msg)) return;
+    callApi('/api/git/discard', { untracked: isUntracked });
+  };
+
   return (
-    <div className="flex items-center gap-2 px-3 py-0.5 text-[12px] hover:bg-muted/50">
+    <div className="group flex items-center gap-2 px-3 py-0.5 text-[12px] hover:bg-muted/50">
       <span className={`shrink-0 font-mono ${statusColors[file.status] || 'text-muted-foreground'}`}>
         {statusLetters[file.status] || '?'}
       </span>
-      {file.staged && (
-        <Circle size={6} weight="fill" className="text-green-500 shrink-0" />
-      )}
-      <span className="truncate text-foreground/80">{file.path}</span>
+      <span className="truncate text-foreground/80 flex-1 min-w-0">{file.path}</span>
+
+      {/* Action buttons — visible on hover */}
+      <div className={`shrink-0 flex items-center gap-0.5 ${loading ? 'opacity-50' : 'opacity-0 group-hover:opacity-100'} transition-opacity`}>
+        {file.staged ? (
+          // Staged: unstage only
+          <ActionButton title="取消暂存" onClick={handleUnstage} disabled={loading}>
+            <Minus size={11} />
+          </ActionButton>
+        ) : (
+          <>
+            {/* Unstaged tracked or untracked: stage + discard */}
+            <ActionButton title="暂存" onClick={handleStage} disabled={loading}>
+              <Plus size={11} />
+            </ActionButton>
+            <ActionButton
+              title={file.status === 'untracked' ? '删除文件' : '撤销修改'}
+              onClick={handleDiscard}
+              disabled={loading}
+              destructive
+            >
+              {file.status === 'untracked' ? <Trash size={11} /> : <ArrowsCounterClockwise size={11} />}
+            </ActionButton>
+          </>
+        )}
+      </div>
     </div>
+  );
+}
+
+function ActionButton({
+  title,
+  onClick,
+  disabled,
+  destructive = false,
+  children,
+}: {
+  title: string;
+  onClick: () => void;
+  disabled: boolean;
+  destructive?: boolean;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      title={title}
+      onClick={(e) => { e.stopPropagation(); onClick(); }}
+      disabled={disabled}
+      className={`flex items-center justify-center w-4 h-4 rounded transition-colors disabled:cursor-not-allowed
+        ${destructive
+          ? 'text-muted-foreground hover:text-destructive hover:bg-destructive/10'
+          : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+        }`}
+    >
+      {children}
+    </button>
   );
 }

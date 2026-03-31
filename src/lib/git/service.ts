@@ -368,6 +368,29 @@ export async function getWorktrees(cwd: string): Promise<GitWorktree[]> {
   return worktrees;
 }
 
+export async function stageFile(cwd: string, filePath: string): Promise<void> {
+  await runGit(['add', '--', filePath], { cwd });
+}
+
+export async function unstageFile(cwd: string, filePath: string): Promise<void> {
+  // `git restore --staged` requires git 2.23+; fallback to `git reset HEAD` for older git
+  try {
+    await runGit(['restore', '--staged', '--', filePath], { cwd });
+  } catch {
+    await runGit(['reset', 'HEAD', '--', filePath], { cwd });
+  }
+}
+
+export async function discardFile(cwd: string, filePath: string, untracked: boolean): Promise<void> {
+  if (untracked) {
+    // Remove untracked file — irreversible
+    await runGit(['clean', '-f', '--', filePath], { cwd });
+  } else {
+    // Restore tracked file to last committed state
+    await runGit(['restore', '--', filePath], { cwd });
+  }
+}
+
 export function sanitizeBranchForPath(branch: string): string {
   return branch.replace(/[^a-zA-Z0-9._-]/g, '-').replace(/-+/g, '-').replace(/^-|-$/g, '');
 }

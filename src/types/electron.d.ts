@@ -81,6 +81,9 @@ interface ElectronAPI {
     isActive: () => Promise<boolean>;
   };
   terminal?: ElectronTerminalAPI;
+  widget?: {
+    exportPng: (html: string, width: number, isDark: boolean) => Promise<string>;
+  };
 }
 
 declare global {
