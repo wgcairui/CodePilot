@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useCallback } from "react";
-import { GitBranch, GitCommit, CloudArrowUp, ArrowUp, ArrowLeft, Plus, Minus, ArrowsCounterClockwise, Trash } from "@/components/ui/icon";
+import { useState, useCallback, useEffect } from "react";
+import { GitBranch, GitCommit, CloudArrowUp, ArrowUp, ArrowLeft, Plus, Minus, ArrowsCounterClockwise, Trash, X } from "@/components/ui/icon";
 import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "@/hooks/useTranslation";
@@ -165,6 +165,95 @@ export function GitStatusSection({ status }: GitStatusSectionProps) {
   );
 }
 
+// ─── Diff Dialog ──────────────────────────────────────────────────────────────
+
+interface DiffDialogProps {
+  cwd: string;
+  file: GitChangedFile;
+  onClose: () => void;
+}
+
+function DiffDialog({ cwd, file, onClose }: DiffDialogProps) {
+  const [diff, setDiff] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch(
+          `/api/git/diff?cwd=${encodeURIComponent(cwd)}&path=${encodeURIComponent(file.path)}&staged=${file.staged}`
+        );
+        const data = await res.json();
+        setDiff(data.diff ?? '');
+      } catch {
+        setDiff('');
+      } finally {
+        setLoading(false);
+      }
+    })();
+  }, [cwd, file.path, file.staged]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50"
+      onClick={onClose}
+    >
+      <div
+        className="bg-background border border-border rounded-lg shadow-xl w-[800px] max-w-[95vw] max-h-[80vh] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Header */}
+        <div className="flex items-center justify-between px-4 py-3 border-b border-border shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-xs font-mono text-muted-foreground shrink-0">
+              {file.staged ? '已暂存' : '未暂存'}
+            </span>
+            <span className="text-sm font-mono truncate text-foreground">{file.path}</span>
+          </div>
+          <button
+            onClick={onClose}
+            className="text-muted-foreground hover:text-foreground transition-colors shrink-0 ml-2"
+          >
+            <X size={16} />
+          </button>
+        </div>
+
+        {/* Diff content */}
+        <div className="overflow-auto flex-1 p-4">
+          {loading ? (
+            <div className="flex items-center justify-center h-20">
+              <Spinner className="size-4 text-muted-foreground" />
+            </div>
+          ) : !diff ? (
+            <p className="text-sm text-muted-foreground text-center py-8">暂无 diff（文件可能是新增或未跟踪）</p>
+          ) : (
+            <pre className="text-[12px] font-mono leading-relaxed whitespace-pre-wrap break-all">
+              {diff.split('\n').map((line, i) => (
+                <span
+                  key={i}
+                  className={
+                    line.startsWith('+') && !line.startsWith('+++')
+                      ? 'block text-green-600 dark:text-green-400 bg-green-500/10' // lint-allow-raw-color
+                      : line.startsWith('-') && !line.startsWith('---')
+                      ? 'block text-red-600 dark:text-red-400 bg-red-500/10' // lint-allow-raw-color
+                      : line.startsWith('@@')
+                      ? 'block text-blue-500 dark:text-blue-400' // lint-allow-raw-color
+                      : 'block text-muted-foreground'
+                  }
+                >
+                  {line || ' '}
+                </span>
+              ))}
+            </pre>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── File Change Item ──────────────────────────────────────────────────────────
+
 interface FileChangeItemProps {
   file: GitChangedFile;
   cwd: string;
@@ -173,6 +262,7 @@ interface FileChangeItemProps {
 
 function FileChangeItem({ file, cwd, onRefresh }: FileChangeItemProps) {
   const [loading, setLoading] = useState(false);
+  const [showDiff, setShowDiff] = useState(false);
 
   const statusColors: Record<string, string> = {
     modified: 'text-amber-500',
@@ -226,11 +316,21 @@ function FileChangeItem({ file, cwd, onRefresh }: FileChangeItemProps) {
   };
 
   return (
+    <>
+    {showDiff && (
+      <DiffDialog cwd={cwd} file={file} onClose={() => setShowDiff(false)} />
+    )}
     <div className="group flex items-center gap-2 px-3 py-0.5 text-[12px] hover:bg-muted/50">
       <span className={`shrink-0 font-mono ${statusColors[file.status] || 'text-muted-foreground'}`}>
         {statusLetters[file.status] || '?'}
       </span>
-      <span className="truncate text-foreground/80 flex-1 min-w-0">{file.path}</span>
+      <button
+        className="truncate text-foreground/80 flex-1 min-w-0 text-left hover:text-foreground transition-colors"
+        onClick={() => setShowDiff(true)}
+        title="查看 diff"
+      >
+        {file.path}
+      </button>
 
       {/* Action buttons — visible on hover; spinner when loading */}
       <div className={`shrink-0 flex items-center gap-0.5 ${loading ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} transition-opacity`}>
@@ -259,6 +359,7 @@ function FileChangeItem({ file, cwd, onRefresh }: FileChangeItemProps) {
         )}
       </div>
     </div>
+    </>
   );
 }
 
