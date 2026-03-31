@@ -73,11 +73,13 @@ export function CommitDialog({ cwd, open, onClose, onSuccess }: CommitDialogProp
     setCommitting(true);
     setError(null);
     try {
-      // Commit
+      // Commit (45s timeout covers git add + commit + pre-commit hooks)
+      const commitAbort = AbortSignal.timeout(45_000);
       const commitRes = await fetch("/api/git/commit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ cwd, message: trimmed }),
+        signal: commitAbort,
       });
       if (!commitRes.ok) {
         const data = await commitRes.json();
@@ -86,10 +88,12 @@ export function CommitDialog({ cwd, open, onClose, onSuccess }: CommitDialogProp
 
       // Push if selected
       if (mode === "commit-and-push") {
+        const pushAbort = AbortSignal.timeout(60_000);
         const pushRes = await fetch("/api/git/push", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ cwd }),
+          signal: pushAbort,
         });
         if (!pushRes.ok) {
           const data = await pushRes.json();
