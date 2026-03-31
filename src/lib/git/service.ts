@@ -38,8 +38,18 @@ export async function getRepoRoot(cwd: string): Promise<string> {
 }
 
 export async function getStatus(cwd: string): Promise<GitStatus> {
-  const isRepo = await isGitRepo(cwd);
-  if (!isRepo) {
+  // Single command: --branch adds header lines with branch/upstream/ahead-behind info,
+  // eliminating the need for separate rev-parse / rev-list calls.
+  let statusOutput: string;
+  let repoRoot: string;
+  try {
+    [statusOutput, repoRoot] = await Promise.all([
+      runGit(['status', '--porcelain=v2', '--branch', '--untracked-files=normal'], { cwd }),
+      runGit(['rev-parse', '--show-toplevel'], { cwd, timeoutMs: 5000 }),
+    ]);
+    repoRoot = repoRoot.trim();
+  } catch {
+    // Not a git repo or git not available
     return {
       isRepo: false,
       repoRoot: '',
@@ -52,73 +62,57 @@ export async function getStatus(cwd: string): Promise<GitStatus> {
     };
   }
 
-  const repoRoot = await getRepoRoot(cwd);
-
-  // Get branch info
   let branch = '';
-  try {
-    branch = (await runGit(['rev-parse', '--abbrev-ref', 'HEAD'], { cwd, timeoutMs: 5000 })).trim();
-  } catch {
-    branch = '';
-  }
-
-  // Get upstream
   let upstream = '';
   let ahead = 0;
   let behind = 0;
-  try {
-    upstream = (await runGit(['rev-parse', '--abbrev-ref', '@{upstream}'], { cwd, timeoutMs: 5000 })).trim();
-    const countOutput = (await runGit(['rev-list', '--left-right', '--count', `${upstream}...HEAD`], { cwd, timeoutMs: 5000 })).trim();
-    const parts = countOutput.split(/\s+/);
-    behind = parseInt(parts[0] || '0', 10);
-    ahead = parseInt(parts[1] || '0', 10);
-  } catch {
-    // no upstream
-  }
-
-  // Get changed files using porcelain v2
   const changedFiles: GitChangedFile[] = [];
-  try {
-    const statusOutput = await runGit(['status', '--porcelain=v2', '--untracked-files=normal'], { cwd });
-    for (const line of statusOutput.split('\n')) {
-      if (!line) continue;
 
-      if (line.startsWith('1 ') || line.startsWith('2 ')) {
-        // Changed entry
-        const xy = line.substring(2, 4);
-        const pathPart = line.startsWith('2 ')
-          ? line.split('\t')[1] || line.split(' ').pop() || ''
-          : line.substring(line.lastIndexOf(' ') + 1);
+  for (const line of statusOutput.split('\n')) {
+    if (!line) continue;
 
-        const indexStatus = xy[0];
-        const worktreeStatus = xy[1];
+    if (line.startsWith('# branch.head ')) {
+      branch = line.substring('# branch.head '.length).trim();
+      if (branch === '(detached)') branch = 'HEAD';
+    } else if (line.startsWith('# branch.upstream ')) {
+      upstream = line.substring('# branch.upstream '.length).trim();
+    } else if (line.startsWith('# branch.ab ')) {
+      // Format: "+<ahead> -<behind>"
+      const m = line.match(/\+(\d+)\s+-(\d+)/);
+      if (m) {
+        ahead = parseInt(m[1], 10);
+        behind = parseInt(m[2], 10);
+      }
+    } else if (line.startsWith('1 ') || line.startsWith('2 ')) {
+      const xy = line.substring(2, 4);
+      const pathPart = line.startsWith('2 ')
+        ? line.split('\t')[1] || line.split(' ').pop() || ''
+        : line.substring(line.lastIndexOf(' ') + 1);
 
-        if (indexStatus !== '.' && indexStatus !== '?') {
-          changedFiles.push({
-            path: pathPart.trim(),
-            status: parseStatusChar(indexStatus),
-            staged: true,
-          });
-        }
-        if (worktreeStatus !== '.' && worktreeStatus !== '?') {
-          changedFiles.push({
-            path: pathPart.trim(),
-            status: parseStatusChar(worktreeStatus),
-            staged: false,
-          });
-        }
-      } else if (line.startsWith('? ')) {
-        // Untracked
-        const filePath = line.substring(2);
+      const indexStatus = xy[0];
+      const worktreeStatus = xy[1];
+
+      if (indexStatus !== '.' && indexStatus !== '?') {
         changedFiles.push({
-          path: filePath.trim(),
-          status: 'untracked',
+          path: pathPart.trim(),
+          status: parseStatusChar(indexStatus),
+          staged: true,
+        });
+      }
+      if (worktreeStatus !== '.' && worktreeStatus !== '?') {
+        changedFiles.push({
+          path: pathPart.trim(),
+          status: parseStatusChar(worktreeStatus),
           staged: false,
         });
       }
+    } else if (line.startsWith('? ')) {
+      changedFiles.push({
+        path: line.substring(2).trim(),
+        status: 'untracked',
+        staged: false,
+      });
     }
-  } catch {
-    // status failed
   }
 
   return {
@@ -219,9 +213,6 @@ export async function getLog(cwd: string, limit = 50): Promise<GitLogEntry[]> {
 }
 
 export async function commit(cwd: string, message: string): Promise<string> {
-  // Stage all changes
-  await runGit(['add', '-A'], { cwd, timeoutMs: 15000 });
-
   // Check if there are staged changes.
   // `git diff --cached --quiet` exits 0 = clean, exits 1 = has staged changes.
   // runGit rejects on any non-zero exit. We treat rejection as "has changes".
@@ -366,6 +357,40 @@ export async function getWorktrees(cwd: string): Promise<GitWorktree[]> {
   );
 
   return worktrees;
+}
+
+export async function stageFile(cwd: string, filePath: string): Promise<void> {
+  await runGit(['add', '--', filePath], { cwd });
+}
+
+export async function unstageFile(cwd: string, filePath: string): Promise<void> {
+  // `git restore --staged` requires git 2.23+; fallback to `git reset HEAD` for older git
+  try {
+    await runGit(['restore', '--staged', '--', filePath], { cwd });
+  } catch {
+    await runGit(['reset', 'HEAD', '--', filePath], { cwd });
+  }
+}
+
+export async function discardFile(cwd: string, filePath: string, untracked: boolean): Promise<void> {
+  if (untracked) {
+    // Remove untracked file — irreversible
+    await runGit(['clean', '-f', '--', filePath], { cwd });
+  } else {
+    // Restore tracked file to last committed state
+    await runGit(['restore', '--', filePath], { cwd });
+  }
+}
+
+export async function getFileDiff(cwd: string, filePath: string, staged: boolean): Promise<string> {
+  const args = staged
+    ? ['diff', '--cached', '--', filePath]
+    : ['diff', '--', filePath];
+  try {
+    return await runGit(args, { cwd, timeoutMs: 10000 });
+  } catch {
+    return '';
+  }
 }
 
 export function sanitizeBranchForPath(branch: string): string {

@@ -84,8 +84,31 @@ export function PresetConnectDialog({
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // MiniMax chat provider import: store provider ID, fetch raw key on button click
+  const [minimaxChatProviderId, setMinimaxChatProviderId] = useState<string | null>(null);
   const { t } = useTranslation();
   const isZh = t('nav.chats') === '对话';
+
+  // Find existing MiniMax chat provider when minimax-media preset is opened
+  const presetKey = preset?.key;
+  useEffect(() => {
+    if (!open || !presetKey?.startsWith('minimax-media')) return;
+    setMinimaxChatProviderId(null);
+    const matchHost = presetKey === 'minimax-media-cn' ? 'minimaxi.com' : 'minimax.io';
+    const ctrl = new AbortController();
+    fetch('/api/providers', { signal: ctrl.signal })
+      .then(r => r.ok ? r.json() : null)
+      .then((data) => {
+        if (!data?.providers) return;
+        const chatProvider = data.providers.find(
+          (p: { id: string; base_url: string }) =>
+            p.base_url?.includes(matchHost) && p.base_url?.includes('anthropic'),
+        );
+        if (chatProvider?.id) setMinimaxChatProviderId(chatProvider.id);
+      })
+      .catch(e => { if ((e as Error).name !== 'AbortError') { /* ignore */ } });
+    return () => ctrl.abort();
+  }, [open, presetKey]);
 
   // Reset form when dialog opens
   useEffect(() => {
@@ -371,6 +394,23 @@ export function PresetConnectDialog({
                 <p className="text-[11px] text-muted-foreground">
                   Auth: <span className="font-mono">{authStyle === "auth_token" ? "Authorization: Bearer ..." : "X-Api-Key: ..."}</span>
                 </p>
+              )}
+              {/* MiniMax Media: import key from existing MiniMax chat provider */}
+              {preset.key.startsWith('minimax-media') && minimaxChatProviderId && !apiKey && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="text-[11px] h-7 px-2.5 mt-1"
+                  onClick={() => {
+                    fetch(`/api/providers/${minimaxChatProviderId}/raw-key`)
+                      .then(r => r.ok ? r.json() : null)
+                      .then(data => { if (data?.api_key) setApiKey(data.api_key); })
+                      .catch(() => {});
+                  }}
+                >
+                  {isZh ? '从已有 MiniMax 账号导入 Key' : 'Import key from existing MiniMax provider'}
+                </Button>
               )}
               {/* Smart recommend for thirdparty based on URL */}
               {preset.key === "anthropic-thirdparty" && baseUrl && (() => {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback, useRef, useEffect } from "react";
-import { X, GitCommit, CloudArrowUp } from "@/components/ui/icon";
+import { X, GitCommit, CloudArrowUp, Sparkle, SpinnerGap } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "@/hooks/useTranslation";
 
@@ -19,6 +19,7 @@ export function CommitDialog({ cwd, open, onClose, onSuccess }: CommitDialogProp
   const [message, setMessage] = useState("");
   const [mode, setMode] = useState<CommitMode>("commit");
   const [committing, setCommitting] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
@@ -45,17 +46,40 @@ export function CommitDialog({ cwd, open, onClose, onSuccess }: CommitDialogProp
     return () => window.removeEventListener("keydown", handler);
   }, [open, onClose]);
 
+  const handleGenerate = useCallback(async () => {
+    if (!cwd || generating || committing) return;
+    setGenerating(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/git/generate-commit-message", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ cwd }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Generation failed");
+      setMessage(data.message || "");
+      textareaRef.current?.focus();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Generation failed");
+    } finally {
+      setGenerating(false);
+    }
+  }, [cwd, generating, committing]);
+
   const handleSubmit = useCallback(async () => {
     const trimmed = message.trim();
     if (!trimmed || !cwd || committing) return;
     setCommitting(true);
     setError(null);
     try {
-      // Commit
+      // Commit (45s timeout covers git add + commit + pre-commit hooks)
+      const commitAbort = AbortSignal.timeout(45_000);
       const commitRes = await fetch("/api/git/commit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ cwd, message: trimmed }),
+        signal: commitAbort,
       });
       if (!commitRes.ok) {
         const data = await commitRes.json();
@@ -64,10 +88,12 @@ export function CommitDialog({ cwd, open, onClose, onSuccess }: CommitDialogProp
 
       // Push if selected
       if (mode === "commit-and-push") {
+        const pushAbort = AbortSignal.timeout(60_000);
         const pushRes = await fetch("/api/git/push", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ cwd }),
+          signal: pushAbort,
         });
         if (!pushRes.ok) {
           const data = await pushRes.json();
@@ -104,19 +130,35 @@ export function CommitDialog({ cwd, open, onClose, onSuccess }: CommitDialogProp
 
         {/* Body */}
         <div className="p-4 space-y-3">
-          <textarea
-            ref={textareaRef}
-            value={message}
-            onChange={(e) => setMessage(e.target.value)}
-            placeholder={t('git.commitMessage')}
-            className="w-full h-24 rounded-md border border-input bg-transparent px-3 py-2 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-ring"
-            onKeyDown={(e) => {
-              if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
-                e.preventDefault();
-                handleSubmit();
-              }
-            }}
-          />
+          <div className="relative">
+            <textarea
+              ref={textareaRef}
+              value={message}
+              onChange={(e) => setMessage(e.target.value)}
+              placeholder={t('git.commitMessage')}
+              disabled={generating}
+              className="w-full h-24 rounded-md border border-input bg-transparent px-3 py-2 pr-9 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-ring disabled:opacity-50"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
+                  e.preventDefault();
+                  handleSubmit();
+                }
+              }}
+            />
+            <button
+              type="button"
+              onClick={handleGenerate}
+              disabled={generating || committing}
+              title="AI 生成提交信息"
+              className="absolute top-2 right-2 flex items-center justify-center w-5 h-5 rounded text-muted-foreground hover:text-foreground hover:bg-muted transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              {generating ? (
+                <SpinnerGap size={13} className="animate-spin" />
+              ) : (
+                <Sparkle size={13} />
+              )}
+            </button>
+          </div>
 
           {/* Mode selector */}
           <div className="flex flex-col gap-1.5">

@@ -1091,7 +1091,10 @@ const zh: Record<TranslationKey, string> = {
 
   // ── Dashboard ─────────────────────────────────────────────────
   'dashboard.title': '看板',
-  'dashboard.empty': '还没有固定的组件。在聊天中固定生成式 UI 组件来构建你的看板。',
+  'dashboard.empty': '还没有看板组件',
+  'dashboard.emptyStep1': '在聊天中向 Claude 描述你想要的图表或可视化',
+  'dashboard.emptyStep2': '生成后，点击组件右上角的 Pin 按钮固定到这里',
+  'dashboard.emptyExample': '试试：「帮我生成一个显示 Git 提交统计的图表」',
   'dashboard.refresh': '刷新全部',
   'dashboard.refreshing': '刷新中...',
   'dashboard.autoRefresh': '打开时自动刷新',

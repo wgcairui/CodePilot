@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
-import { X, ArrowClockwise, CaretUp, CaretDown, ChartBar, Trash, DownloadSimple } from "@/components/ui/icon";
+import { useRouter } from "next/navigation";
+import { X, ArrowClockwise, CaretUp, CaretDown, CaretRight, ChartBar, Trash, DownloadSimple, ArrowSquareOut } from "@/components/ui/icon";
 import { showToast } from "@/hooks/useToast";
 import { Button } from "@/components/ui/button";
 import { usePanel } from "@/hooks/usePanel";
@@ -10,6 +11,24 @@ import { ResizeHandle } from "@/components/layout/ResizeHandle";
 import { WidgetRenderer } from "@/components/chat/WidgetRenderer";
 import type { DashboardConfig, DashboardWidget } from "@/types/dashboard";
 
+function formatWidgetTime(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const isToday = d.toDateString() === now.toDateString();
+  const isThisYear = d.getFullYear() === now.getFullYear();
+  const hm = d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit', hour12: false });
+  if (isToday) return hm;
+  if (isThisYear) return `${d.getMonth() + 1}/${d.getDate()} ${hm}`;
+  return `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()} ${hm}`;
+}
+
+interface SessionGroup {
+  sessionId: string;
+  sessionTitle: string;
+  widgets: DashboardWidget[];
+  newestCreatedAt: string;
+}
+
 const DASHBOARD_MIN_WIDTH = 320;
 const DASHBOARD_MAX_WIDTH = 800;
 const DASHBOARD_DEFAULT_WIDTH = 640;
@@ -17,13 +36,17 @@ const DASHBOARD_DEFAULT_WIDTH = 640;
 export function DashboardPanel() {
   const { setDashboardPanelOpen, workingDirectory } = usePanel();
   const { t } = useTranslation();
+  const router = useRouter();
   const [width, setWidth] = useState(DASHBOARD_DEFAULT_WIDTH);
   const [config, setConfig] = useState<DashboardConfig | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshingAll, setRefreshingAll] = useState(false);
   const [refreshingIds, setRefreshingIds] = useState<Set<string>>(new Set());
   const [autoRefresh, setAutoRefresh] = useState(false);
+  const [sessionTitles, setSessionTitles] = useState<Map<string, string>>(new Map());
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
   const initialLoadDone = useRef(false);
+  const groupsInitializedRef = useRef(false);
 
   const handleResize = useCallback((delta: number) => {
     setWidth((w) => Math.min(DASHBOARD_MAX_WIDTH, Math.max(DASHBOARD_MIN_WIDTH, w - delta)));
@@ -50,6 +73,31 @@ export function DashboardPanel() {
   useEffect(() => {
     loadDashboard();
   }, [loadDashboard]);
+
+  // Fetch session titles for grouped header display
+  useEffect(() => {
+    if (!config) return;
+    const uniqueSessionIds = [
+      ...new Set(
+        config.widgets
+          .map(w => w.pinnedFrom?.sessionId)
+          .filter((id): id is string => !!id),
+      ),
+    ];
+    if (uniqueSessionIds.length === 0) return;
+    Promise.all(
+      uniqueSessionIds.map(async (sessionId) => {
+        try {
+          const res = await fetch(`/api/chat/sessions/${sessionId}`);
+          if (res.ok) {
+            const data = await res.json();
+            return [sessionId, data.session?.title || sessionId] as [string, string];
+          }
+        } catch { /* ignore */ }
+        return [sessionId, sessionId] as [string, string];
+      }),
+    ).then(entries => setSessionTitles(new Map(entries)));
+  }, [config]);
 
   // Auto-refresh on open
   useEffect(() => {
@@ -216,18 +264,46 @@ export function DashboardPanel() {
 
   const widgets = config?.widgets ?? [];
 
-  // Stable render order: sort by ID so React never reorders DOM (preserves iframes).
-  // Visual order controlled by CSS `order` based on position in config.widgets.
-  const stableWidgets = useMemo(() => {
-    const ids = widgets.map(w => w.id).sort();
-    return ids.map(id => widgets.find(w => w.id === id)!);
-  }, [widgets]);
+  // Group widgets by session, sorted newest group first
+  const sessionGroups = useMemo<SessionGroup[]>(() => {
+    const groupMap = new Map<string, DashboardWidget[]>();
+    for (const widget of widgets) {
+      const key = widget.pinnedFrom?.sessionId ?? '__uncategorized__';
+      if (!groupMap.has(key)) groupMap.set(key, []);
+      groupMap.get(key)!.push(widget);
+    }
+    const groups: SessionGroup[] = [];
+    for (const [sessionId, groupWidgets] of groupMap) {
+      const newestCreatedAt = groupWidgets.reduce(
+        (latest, w) => (w.createdAt > latest ? w.createdAt : latest),
+        '',
+      );
+      const sessionTitle =
+        sessionId === '__uncategorized__'
+          ? '未分类'
+          : sessionTitles.get(sessionId) || '…';
+      groups.push({ sessionId, sessionTitle, widgets: groupWidgets, newestCreatedAt });
+    }
+    groups.sort((a, b) => b.newestCreatedAt.localeCompare(a.newestCreatedAt));
+    return groups;
+  }, [widgets, sessionTitles]);
 
-  const orderMap = useMemo(() => {
-    const m = new Map<string, number>();
-    widgets.forEach((w, i) => m.set(w.id, i));
-    return m;
-  }, [widgets]);
+  // Auto-expand the newest group on first load
+  useEffect(() => {
+    if (sessionGroups.length > 0 && !groupsInitializedRef.current) {
+      groupsInitializedRef.current = true;
+      setExpandedGroups(new Set([sessionGroups[0].sessionId]));
+    }
+  }, [sessionGroups]);
+
+  const toggleGroup = useCallback((sessionId: string) => {
+    setExpandedGroups(prev => {
+      const next = new Set(prev);
+      if (next.has(sessionId)) next.delete(sessionId);
+      else next.add(sessionId);
+      return next;
+    });
+  }, []);
 
   return (
     <div ref={panelRef} className="flex h-full shrink-0 overflow-hidden">
@@ -287,26 +363,87 @@ export function DashboardPanel() {
               Loading...
             </div>
           ) : widgets.length === 0 ? (
-            <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground px-4">
-              <ChartBar size={32} className="mb-3 opacity-40" />
-              <p className="text-sm">{t('dashboard.empty')}</p>
+            <div className="flex flex-col items-center justify-center h-full text-center px-6 py-8 gap-5">
+              <ChartBar size={36} className="opacity-30 text-muted-foreground" />
+              <div className="flex flex-col gap-1">
+                <p className="text-sm font-medium text-foreground/70">{t('dashboard.empty')}</p>
+              </div>
+              <div className="flex flex-col gap-3 w-full max-w-[260px]">
+                <div className="flex items-start gap-3 text-left">
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-semibold text-muted-foreground mt-0.5">1</span>
+                  <p className="text-xs text-muted-foreground leading-relaxed">{t('dashboard.emptyStep1')}</p>
+                </div>
+                <div className="flex items-start gap-3 text-left">
+                  <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-semibold text-muted-foreground mt-0.5">2</span>
+                  <p className="text-xs text-muted-foreground leading-relaxed">{t('dashboard.emptyStep2')}</p>
+                </div>
+              </div>
+              <p className="text-[11px] text-muted-foreground/50 italic leading-relaxed max-w-[260px]">{t('dashboard.emptyExample')}</p>
             </div>
           ) : (
-            <div className="flex flex-col gap-4 p-3">
-              {stableWidgets.map((widget) => {
-                const displayIdx = orderMap.get(widget.id) ?? 0;
+            <div className="flex flex-col">
+              {sessionGroups.map((group) => {
+                const isExpanded = expandedGroups.has(group.sessionId);
+                // Stable DOM order within group: sort by ID
+                const stableGroup = [...group.widgets].sort((a, b) => a.id.localeCompare(b.id));
                 return (
-                  <DashboardWidgetCard
-                    key={widget.id}
-                    widget={widget}
-                    style={{ order: displayIdx }}
-                    refreshing={refreshingAll || refreshingIds.has(widget.id)}
-                    isFirst={displayIdx === 0}
-                    isLast={displayIdx === widgets.length - 1}
-                    onRefresh={() => handleRefreshWidget(widget.id)}
-                    onDelete={() => handleDeleteWidget(widget.id)}
-                    onMove={(dir) => handleMoveWidget(widget.id, dir)}
-                  />
+                  <div key={group.sessionId} className="border-b border-border/30 last:border-b-0">
+                    {/* Group header */}
+                    <div className="flex items-center gap-1 px-3 py-2 hover:bg-muted/40 transition-colors">
+                      <button
+                        className="flex flex-1 items-center gap-1.5 min-w-0 text-left"
+                        onClick={() => toggleGroup(group.sessionId)}
+                      >
+                        {isExpanded ? (
+                          <CaretDown size={12} className="shrink-0 text-muted-foreground" />
+                        ) : (
+                          <CaretRight size={12} className="shrink-0 text-muted-foreground" />
+                        )}
+                        <span className="truncate text-[11px] font-semibold text-muted-foreground uppercase tracking-wide">
+                          {group.sessionTitle}
+                        </span>
+                        <span className="shrink-0 text-[10px] text-muted-foreground/50">
+                          ({group.widgets.length})
+                        </span>
+                      </button>
+                      {group.sessionId !== '__uncategorized__' && (
+                        <button
+                          onClick={() => router.push(`/chat/${group.sessionId}`)}
+                          className="shrink-0 text-muted-foreground/50 hover:text-muted-foreground transition-colors"
+                          title="前往对话"
+                        >
+                          <ArrowSquareOut size={12} />
+                        </button>
+                      )}
+                    </div>
+                    {/* Group widgets — newest first within group */}
+                    {isExpanded && (() => {
+                      const sortedGroup = [...group.widgets].sort(
+                        (a, b) => b.createdAt.localeCompare(a.createdAt),
+                      );
+                      const groupOrderMap = new Map(sortedGroup.map((w, i) => [w.id, i]));
+                      return (
+                        <div className="flex flex-col gap-4 px-3 pb-3">
+                          {stableGroup.map((widget) => {
+                            const displayIdx = groupOrderMap.get(widget.id) ?? 0;
+                            return (
+                              <DashboardWidgetCard
+                                key={widget.id}
+                                widget={widget}
+                                style={{ order: displayIdx }}
+                                refreshing={refreshingAll || refreshingIds.has(widget.id)}
+                                isFirst={displayIdx === 0}
+                                isLast={displayIdx === group.widgets.length - 1}
+                                onRefresh={() => handleRefreshWidget(widget.id)}
+                                onDelete={() => handleDeleteWidget(widget.id)}
+                                onMove={(dir) => handleMoveWidget(widget.id, dir)}
+                              />
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+                  </div>
                 );
               })}
             </div>
@@ -335,11 +472,16 @@ function DashboardWidgetCard({ widget, refreshing, isFirst, isLast, style, onRef
       {/* Permanent title bar */}
       <div className="flex items-center justify-between px-2 py-1.5">
         <button
-          className="text-xs font-medium text-foreground/70 truncate hover:text-foreground transition-colors text-left"
+          className="flex flex-col items-start min-w-0 text-left"
           onClick={() => window.dispatchEvent(new CustomEvent('dashboard-widget-drilldown', { detail: { title: widget.title, dataContract: widget.dataContract } }))}
           title={t('dashboard.drilldown')}
         >
-          {widget.title}
+          <span className="text-xs font-medium text-foreground/70 truncate hover:text-foreground transition-colors w-full">
+            {widget.title}
+          </span>
+          <span className="text-[10px] text-muted-foreground/50 tabular-nums">
+            {formatWidgetTime(widget.createdAt)}
+          </span>
         </button>
         <div className="flex items-center gap-0.5 shrink-0 opacity-0 group-hover/card:opacity-100 transition-opacity">
           <Button

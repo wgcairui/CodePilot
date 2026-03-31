@@ -1,5 +1,7 @@
 # CLAUDE.md
 
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 CodePilot — Claude Code 的桌面 GUI 客户端，基于 Electron + Next.js。
 
 > 架构细节见 [ARCHITECTURE.md](./ARCHITECTURE.md)，本文件只包含规则和流程。
@@ -44,11 +46,57 @@ CodePilot — Claude Code 的桌面 GUI 客户端，基于 Electron + Next.js。
 
 **自检命令（pre-commit hook 会自动执行前三项）：**
 - `npm run test` — typecheck + 单元测试（~4s，无需 dev server）
+- `npm run test:unit` — 仅跑单元测试（跳过 typecheck）
 - `npm run test:smoke` — 冒烟测试（~15s，需要 dev server）
 - `npm run test:e2e` — 完整 E2E（~60s+，需要 dev server）
+- `npm run lint` — ESLint 检查
+- `npm run lint:colors` — ⚠️ 检查是否使用了原始 Tailwind 颜色（见下方颜色规则）
+
+**单个测试文件：**
+```
+npx tsx --test src/__tests__/unit/foo.test.ts
+```
 
 修改代码后，commit 前至少确保 `npm run test` 通过。
 涉及 UI 改动时额外运行 `npm run test:smoke`。
+
+## ⚠️ 非显而易见规则
+
+**颜色命名约束（`lint:colors` 会检查）：**
+- 禁止在组件中使用原始 Tailwind 颜色，如 `text-green-500`、`bg-red-600`
+- 必须使用语义 token，如 `text-status-success`、`bg-destructive`
+- 例外：在 `src/components/ui/` 和 `src/components/ai-elements/` 内可用（已豁免）
+- 行内注释 `// lint-allow-raw-color` 可对单行豁免
+
+**Dashboard / Widget 系统：** 见 [`src/lib/CLAUDE.md`](./src/lib/CLAUDE.md)
+- ⚠️ Dashboard 配置存**文件系统**不在 SQLite：`{workDir}/.codepilot/dashboard/dashboard.json`
+- ⚠️ Pin 操作不直接写文件 — 先发消息给 AI，AI 调用 MCP tool 写入（保留对话上下文推断元数据）
+- Widget HTML 在 `.widget-root` 作用域内运行，有独立 Tailwind-like 工具类
+
+**数据目录：**
+- 默认：`~/.codepilot/`（数据库、缓存等）
+- 可用 `CLAUDE_GUI_DATA_DIR` 环境变量覆盖（本地调试时有用）
+
+**新增 provider 类型：** 见 [`src/lib/CLAUDE.md`](./src/lib/CLAUDE.md)（需同步四处）
+
+**TypeScript `isolatedModules` 规则：**
+- 重导出类型必须用 `export type`，否则构建报错（见 `src/lib/image-generator.ts`）
+
+**布局 / Panel / 终端系统：** 见 [`src/components/layout/CLAUDE.md`](./src/components/layout/CLAUDE.md)
+- ⚠️ 新增面板开关需同步三处：`usePanel.ts`（接口）+ `AppShell.tsx`（Provider state）+ `UnifiedTopBar.tsx`（按钮）
+- 终端仅 Electron 有完整 PTY 功能
+
+**Git 面板：** 见 [`src/components/git/CLAUDE.md`](./src/components/git/CLAUDE.md)
+- `GitChangedFile.staged` 已区分暂存/工作区；i18n 已有 `git.staged`/`git.unstaged`
+
+**Gallery 原生支持视频：**
+- `GalleryGrid` 和 `GalleryDetail` 已有 `<video>` 渲染分支，添加视频功能无需改 Gallery
+
+**Next.js 15 动态路由参数是 Promise：**
+- `params` 必须 `const { id } = await context.params`（不能直接解构）
+
+**`/api/providers` 返回的 api_key 是 masked（`***...`）：**
+- 前端无法直接读取原始 key；需调用专用端点或后端复制逻辑
 
 ## 改动自查
 
@@ -73,11 +121,7 @@ CodePilot — Claude Code 的桌面 GUI 客户端，基于 Electron + Next.js。
    - 未来可能的方向和已知的局限性
    - 目标读者：产品决策者，需要能理解设计背后的"为什么"
 
-**两份文档必须互相反向链接：**
-- 交接文档开头：`> 产品思考见 [docs/insights/xxx.md](../insights/xxx.md)`
-- 产品文档开头：`> 技术实现见 [docs/handover/xxx.md](../handover/xxx.md)`
-
-**文件命名保持一致**（如 `cli-tools.md`），方便对照查找。
+**两份文档必须互相反向链接，文件命名保持一致**（如 `cli-tools.md`）。
 
 ## 发版
 
@@ -87,53 +131,7 @@ CodePilot — Claude Code 的桌面 GUI 客户端，基于 Electron + Next.js。
 
 **构建：** macOS 产出 DMG（arm64 + x64），Windows 产出 NSIS 安装包。`scripts/after-pack.js` 重编译 better-sqlite3 为 Electron ABI。构建前清理 `rm -rf release/ .next/`。
 
-**Release Notes 格式（必须严格遵循）：**
-
-标题：`CodePilot v{版本号}`
-
-正文结构：
-
-```markdown
-## CodePilot v{版本号}
-
-> 一句话版本摘要，说明这个版本的核心主题或推荐升级理由。
-
-### 新增功能
-- 功能描述（面向用户的语言，不要写 commit hash）
-
-### 修复问题
-- 修复了 xxx 的问题
-
-### 优化改进
-- 优化了 xxx
-
-## 下载地址
-
-### macOS
-- [Apple Silicon (M1/M2/M3/M4)](https://github.com/op7418/CodePilot/releases/download/v{版本号}/CodePilot-{版本号}-arm64.dmg)
-- [Intel](https://github.com/op7418/CodePilot/releases/download/v{版本号}/CodePilot-{版本号}-x64.dmg)
-
-### Windows
-- [Windows 安装包](https://github.com/op7418/CodePilot/releases/download/v{版本号}/CodePilot-Setup-{版本号}.exe)
-
-## 安装说明
-
-**macOS**: 下载 DMG → 拖入 Applications → 首次启动如遇安全提示，在系统设置 > 隐私与安全中点击"仍要打开"
-**Windows**: 下载 exe 安装包 → 双击安装
-
-## 系统要求
-
-- macOS 12.0+ / Windows 10+ / Linux (glibc 2.31+)
-- 需要配置 API 服务商（Anthropic / OpenRouter 等）
-- 推荐安装 Claude Code CLI 以获得完整功能
-```
-
-**Release Notes 写作规则：**
-- 更新内容必须用用户能理解的语言，不要出现 commit hash、函数名、文件路径
-- 每个条目说清楚"用户能感知到什么变化"
-- 下载链接必须是完整的 GitHub release download URL，用户点击即可下载
-- 如果某个分类没有内容（如没有修复），跳过该分类不要留空标题
-- `git log --oneline` 的输出只用于自己梳理，不要原样复制到 Release Notes
+**Release Notes 格式：** 见 [`docs/release-notes-template.md`](./docs/release-notes-template.md)（严格遵循模板和写作规则）
 
 ## 执行计划
 

@@ -114,7 +114,21 @@ export class DiscordAdapter extends BaseChannelAdapter {
     });
 
     // Login and wait for ready
-    await this.client.login(token);
+    try {
+      await this.client.login(token);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('disallowed intents') || msg.includes('Disallowed intents')) {
+        throw new Error(
+          'Discord bot 缺少 Message Content 特权意图。' +
+          '请前往 Discord Developer Portal → Bot → Privileged Gateway Intents → 开启 "Message Content Intent"，然后重新启动。',
+        );
+      }
+      if (msg.includes('TOKEN_INVALID') || msg.includes('invalid token')) {
+        throw new Error('Discord Bot Token 无效，请检查设置中的 Token 是否正确。');
+      }
+      throw err;
+    }
 
     // Wait for the ready event
     await new Promise<void>((resolve) => {

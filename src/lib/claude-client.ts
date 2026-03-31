@@ -314,15 +314,21 @@ export async function generateTextViaSdk(params: {
   // Auto-timeout after 60s to prevent indefinite hangs
   const timeoutId = setTimeout(() => abortController.abort(), 60_000);
 
+  const stderrChunks: string[] = [];
   const queryOptions: Options = {
     cwd: os.homedir(),
     abortController,
     permissionMode: 'bypassPermissions',
     allowDangerouslySkipPermissions: true,
     env: sanitizeEnv(sdkEnv),
-    settingSources: resolved.settingSources as Options['settingSources'],
+    // Exclude 'user' to prevent ~/.claude/settings.json env section from
+    // overriding our provider credentials (e.g. personal ANTHROPIC_BASE_URL
+    // shadowing MiniMax/Kimi base URL). One-shot generation doesn't need
+    // user-level hooks or plugins.
+    settingSources: ['project', 'local'] as Options['settingSources'],
     systemPrompt: params.system,
     maxTurns: 1,
+    stderr: (data: string) => { stderrChunks.push(data); },
   };
 
   if (params.model) {
@@ -347,16 +353,27 @@ export async function generateTextViaSdk(params: {
 
   // Iterate through all messages; the last one with type 'result' has the answer
   let resultText = '';
+  let resultIsError = false;
   try {
     for await (const msg of conversation) {
       if (msg.type === 'result' && 'result' in msg) {
-        resultText = (msg as SDKResultSuccess).result || '';
+        const resultMsg = msg as SDKResultSuccess;
+        resultText = resultMsg.result || '';
+        resultIsError = resultMsg.is_error ?? false;
       }
     }
   } catch (err) {
     clearTimeout(timeoutId);
     if (abortController.signal.aborted && !(params.abortSignal?.aborted)) {
       throw new Error('SDK query timed out after 60s');
+    }
+    // If CC emitted an error result before exiting with code 1, surface that message
+    if (resultText) {
+      throw new Error(resultText.slice(0, 300));
+    }
+    const stderrOutput = stderrChunks.join('').trim();
+    if (stderrOutput && err instanceof Error) {
+      throw new Error(`${err.message} | stderr: ${stderrOutput.slice(0, 300)}`);
     }
     throw err;
   }
@@ -365,6 +382,10 @@ export async function generateTextViaSdk(params: {
 
   if (!resultText) {
     throw new Error('SDK query returned no result');
+  }
+
+  if (resultIsError) {
+    throw new Error(resultText.slice(0, 300));
   }
 
   return resultText;
@@ -408,6 +429,10 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
         providerId: options.providerId,
         sessionProviderId: options.sessionProviderId,
       });
+
+      // Accumulate stderr lines for error classification on crash.
+      // Declared outside try/catch so the catch block can access it.
+      const stderrForClassifier: string[] = [];
 
       try {
         const resolvedWorkingDirectory = resolveWorkingDirectory([
@@ -618,13 +643,21 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
         }
 
         // Pass through SDK-specific options from ClaudeStreamOptions
-        if (thinking) {
+        // sdkProxyOnly providers (MiniMax, Kimi, GLM, etc.) proxy to their own models
+        // which don't support extended thinking — skip it to prevent CLI crashes.
+        if (thinking && !resolved.sdkProxyOnly) {
           queryOptions.thinking = thinking;
         }
         // Always set effort explicitly to prevent user-level ~/.claude/settings.json
         // from injecting 'high' effort via settingSources inheritance.
         // UI-selected effort takes priority; otherwise default to 'medium'.
-        queryOptions.effort = effort || 'medium';
+        // Exception: sdkProxyOnly providers (MiniMax, Kimi, GLM) may not support
+        // the effort parameter — skip it to avoid CLI crashes.
+        if (!resolved.sdkProxyOnly) {
+          queryOptions.effort = effort || 'medium';
+        } else if (effort) {
+          queryOptions.effort = effort; // only apply if user explicitly set it
+        }
         if (outputFormat) {
           queryOptions.outputFormat = outputFormat;
         }
@@ -775,7 +808,8 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
         // normal stdout. Notifications are derived from stream messages instead
         // (task_notification, result). TodoWrite sync uses tool_use → tool_result.
 
-        // Capture real-time stderr output from Claude Code process
+        // Capture real-time stderr output from Claude Code process.
+        // Also accumulated in stderrForClassifier (declared above try) for error classification.
         queryOptions.stderr = (data: string) => {
           // Diagnostic: log raw stderr data length to server console
           console.log(`[stderr] received ${data.length} bytes, first 200 chars:`, data.slice(0, 200).replace(/[\x00-\x1F\x7F]/g, '?'));
@@ -792,6 +826,7 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
             .replace(/\n{3,}/g, '\n\n')                // Collapse multiple blank lines
             .trim();
           if (cleaned) {
+            stderrForClassifier.push(cleaned);
             controller.enqueue(formatSSE({
               type: 'tool_output',
               data: cleaned,
@@ -1229,7 +1264,10 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
       } catch (error) {
         const rawMessage = error instanceof Error ? error.message : 'Unknown error';
         // Log full error details for debugging (visible in terminal / dev tools)
-        const stderrContent = error instanceof Error ? (error as { stderr?: string }).stderr : undefined;
+        // Prefer accumulated stderr from the callback; fall back to error.stderr property
+        const stderrContent = stderrForClassifier.length > 0
+          ? stderrForClassifier.join('\n')
+          : (error instanceof Error ? (error as { stderr?: string }).stderr : undefined);
         console.error('[claude-client] Stream error:', {
           message: rawMessage,
           stack: error instanceof Error ? error.stack : undefined,

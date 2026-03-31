@@ -1094,7 +1094,10 @@ const en = {
 
   // ── Dashboard ─────────────────────────────────────────────────
   'dashboard.title': 'Dashboard',
-  'dashboard.empty': 'No widgets pinned yet. Pin widgets from chat to build your dashboard.',
+  'dashboard.empty': 'No dashboard widgets yet',
+  'dashboard.emptyStep1': 'Ask Claude in chat to create a chart or visualization',
+  'dashboard.emptyStep2': 'Click the Pin button on any generated widget to add it here',
+  'dashboard.emptyExample': 'Try: "Generate a chart showing Git commit statistics"',
   'dashboard.refresh': 'Refresh All',
   'dashboard.refreshing': 'Refreshing...',
   'dashboard.autoRefresh': 'Auto-refresh on open',

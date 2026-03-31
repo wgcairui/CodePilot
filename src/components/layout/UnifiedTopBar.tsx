@@ -8,6 +8,7 @@ import {
   PencilSimple,
   DotOutline,
   ChartBar,
+  Terminal,
 } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,6 +32,8 @@ export function UnifiedTopBar() {
     setFileTreeOpen,
     gitPanelOpen,
     setGitPanelOpen,
+    terminalOpen,
+    setTerminalOpen,
     dashboardPanelOpen,
     setDashboardPanelOpen,
     currentBranch,
@@ -227,6 +230,21 @@ export function UnifiedTopBar() {
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom">{t('topBar.fileTree')}</TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={terminalOpen ? "secondary" : "ghost"}
+                    size="icon-sm"
+                    className={terminalOpen ? "" : "text-muted-foreground hover:text-foreground"}
+                    onClick={() => setTerminalOpen(!terminalOpen)}
+                  >
+                    <Terminal size={16} />
+                    <span className="sr-only">{t('topBar.terminal')}</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">{t('topBar.terminal')}</TooltipContent>
               </Tooltip>
 
               <Tooltip>

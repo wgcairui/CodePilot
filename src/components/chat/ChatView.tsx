@@ -10,6 +10,7 @@ import { ModeIndicator } from './ModeIndicator';
 import { ChatPermissionSelector } from './ChatPermissionSelector';
 import { ContextUsageIndicator } from './ContextUsageIndicator';
 import { ImageGenToggle } from './ImageGenToggle';
+import { MediaProviderSelector } from './MediaProviderSelector';
 import { Button } from '@/components/ui/button';
 import { usePanel } from '@/hooks/usePanel';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -361,6 +362,22 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
     return () => window.removeEventListener('widget-pin-request', handler);
   }, []);
 
+  // Listen for "可视化" quick-action on assistant messages.
+  // Sends the message content to AI asking it to render as an interactive widget.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { content } = (e as CustomEvent).detail || {};
+      if (!content || !sendMessageRef.current) return;
+      sendMessageRef.current(
+        `请将以下内容转化为交互式可视化图表组件（流程图、数据图表等）：\n\n${content}`,
+        undefined, undefined,
+        '📊 转为可视化图表',
+      );
+    };
+    window.addEventListener('widget-visualize-request', handler);
+    return () => window.removeEventListener('widget-visualize-request', handler);
+  }, []);
+
   // Listen for dashboard widget drilldown (click title → conversation)
   useEffect(() => {
     const handler = (e: Event) => {
@@ -479,7 +496,7 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
         sdkInitMeta={initMetaRef.current}
       />
       <ChatComposerActionBar
-        left={<><ModeIndicator mode={mode} onModeChange={handleModeChange} disabled={isStreaming} /><ImageGenToggle /></>}
+        left={<><ModeIndicator mode={mode} onModeChange={handleModeChange} disabled={isStreaming} /><ImageGenToggle /><MediaProviderSelector /></>}
         center={
           <ChatPermissionSelector
             sessionId={sessionId}

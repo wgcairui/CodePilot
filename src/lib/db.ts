@@ -832,6 +832,25 @@ function migrateDb(db: Database.Database): void {
     }
   }
 
+  // Video jobs: async video generation tasks (MiniMax etc.)
+  db.exec(
+    `CREATE TABLE IF NOT EXISTS video_jobs (
+      id TEXT PRIMARY KEY,
+      task_id TEXT NOT NULL,
+      provider_id TEXT NOT NULL,
+      session_id TEXT,
+      prompt TEXT NOT NULL,
+      model TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL DEFAULT 'pending',
+      local_path TEXT NOT NULL DEFAULT '',
+      error TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      completed_at TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_video_jobs_status ON video_jobs(status);
+    CREATE INDEX IF NOT EXISTS idx_video_jobs_session ON video_jobs(session_id);`,
+  );
+
   // Migration: remove explicitly openai-compatible providers (SDK does not support them)
   // and backfill empty protocol for legacy custom providers using URL-based inference.
   try {

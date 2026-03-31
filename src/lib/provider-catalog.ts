@@ -21,7 +21,8 @@ export type Protocol =
   | 'bedrock'             // AWS Bedrock (env-based auth, CLAUDE_CODE_USE_BEDROCK)
   | 'vertex'              // Google Vertex AI (env-based auth, CLAUDE_CODE_USE_VERTEX)
   | 'google'              // Google Generative AI (Gemini text)
-  | 'gemini-image';       // Google Gemini image generation
+  | 'gemini-image'        // Google Gemini image generation
+  | 'minimax-media';      // MiniMax image + video generation
 
 /**
  * How the provider authenticates: which env var to inject the API key into.
@@ -418,6 +419,48 @@ export const VENDOR_PRESETS: VendorPreset[] = [
     iconKey: 'server',
   },
 
+  // ── MiniMax Media (CN) ──
+  {
+    key: 'minimax-media-cn',
+    name: 'MiniMax Media (CN)',
+    description: 'MiniMax image + video generation — China region',
+    descriptionZh: 'MiniMax 图片 + 视频生成 — 中国区',
+    protocol: 'minimax-media',
+    authStyle: 'api_key',
+    baseUrl: 'https://api.minimaxi.com',
+    defaultEnvOverrides: {
+      MINIMAX_IMAGE_MODEL: 'image-01',
+      MINIMAX_VIDEO_MODEL: 'MiniMax-Hailuo-2.3',
+    },
+    defaultModels: [
+      { modelId: 'image-01', displayName: 'Image-01' },
+    ],
+    fields: ['api_key'],
+    category: 'media',
+    iconKey: 'minimax',
+  },
+
+  // ── MiniMax Media (Global) ──
+  {
+    key: 'minimax-media-global',
+    name: 'MiniMax Media (Global)',
+    description: 'MiniMax image + video generation — Global region',
+    descriptionZh: 'MiniMax 图片 + 视频生成 — 国际区',
+    protocol: 'minimax-media',
+    authStyle: 'api_key',
+    baseUrl: 'https://api.minimax.io',
+    defaultEnvOverrides: {
+      MINIMAX_IMAGE_MODEL: 'image-01',
+      MINIMAX_VIDEO_MODEL: 'MiniMax-Hailuo-2.3',
+    },
+    defaultModels: [
+      { modelId: 'image-01', displayName: 'Image-01' },
+    ],
+    fields: ['api_key'],
+    category: 'media',
+    iconKey: 'minimax',
+  },
+
   // ── Google Gemini (Image) ──
   {
     key: 'gemini-image',
@@ -466,6 +509,7 @@ export function inferProtocolFromLegacy(
   if (providerType === 'bedrock') return 'bedrock';
   if (providerType === 'vertex') return 'vertex';
   if (providerType === 'gemini-image') return 'gemini-image';
+  if (providerType === 'minimax-media') return 'minimax-media';
 
   // For 'custom' type, check if the base_url matches a known Anthropic-compatible vendor
   if (providerType === 'custom') {
@@ -542,6 +586,7 @@ export function findPresetForLegacy(baseUrl: string, providerType: string, proto
   if (providerType === 'vertex') return VENDOR_PRESETS.find(p => p.key === 'vertex');
   if (providerType === 'openrouter') return VENDOR_PRESETS.find(p => p.key === 'openrouter');
   if (providerType === 'gemini-image') return VENDOR_PRESETS.find(p => p.key === 'gemini-image');
+  if (providerType === 'minimax-media') return VENDOR_PRESETS.find(p => p.key === 'minimax-media-cn');
   if (providerType === 'anthropic' && baseUrl === 'https://api.anthropic.com') {
     return VENDOR_PRESETS.find(p => p.key === 'anthropic-official');
   }
