@@ -36,6 +36,7 @@ export function UnifiedTopBar() {
     setDashboardPanelOpen,
     assistantPanelOpen,
     setAssistantPanelOpen,
+    isAssistantWorkspace,
     currentBranch,
     gitDirtyCount,
   } = usePanel();
@@ -232,20 +233,22 @@ export function UnifiedTopBar() {
                 <TooltipContent side="bottom">{t('topBar.fileTree')}</TooltipContent>
               </Tooltip>
 
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button
-                    variant={assistantPanelOpen ? "secondary" : "ghost"}
-                    size="icon-sm"
-                    className={assistantPanelOpen ? "" : "text-muted-foreground hover:text-foreground"}
-                    onClick={() => setAssistantPanelOpen(!assistantPanelOpen)}
-                  >
-                    <Brain size={16} />
-                    <span className="sr-only">Assistant</span>
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent side="bottom">Assistant</TooltipContent>
-              </Tooltip>
+              {isAssistantWorkspace && (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant={assistantPanelOpen ? "secondary" : "ghost"}
+                      size="icon-sm"
+                      className={assistantPanelOpen ? "" : "text-muted-foreground hover:text-foreground"}
+                      onClick={() => setAssistantPanelOpen(!assistantPanelOpen)}
+                    >
+                      <Brain size={16} />
+                      <span className="sr-only">Assistant</span>
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent side="bottom">Assistant</TooltipContent>
+                </Tooltip>
+              )}
 
               <Tooltip>
                 <TooltipTrigger asChild>

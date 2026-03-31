@@ -38,7 +38,7 @@ interface ChatViewProps {
 }
 
 export function ChatView({ sessionId, initialMessages = [], initialHasMore = false, modelName, providerId, initialPermissionProfile, initialMode }: ChatViewProps) {
-  const { setStreamingSessionId, workingDirectory, setPendingApprovalSessionId, setAssistantPanelOpen, setFileTreeOpen } = usePanel();
+  const { setStreamingSessionId, workingDirectory, setPendingApprovalSessionId, setAssistantPanelOpen, setFileTreeOpen, setIsAssistantWorkspace } = usePanel();
   const { t } = useTranslation();
   const router = useRouter();
   const [messages, setMessages] = useState<Message[]>(initialMessages);
@@ -188,6 +188,7 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
 
         if (data.path && workingDirectory !== data.path) {
           setIsAssistantProject(false);
+          setIsAssistantWorkspace(false);
           const inspectRes = await fetch(`/api/workspace/inspect?path=${encodeURIComponent(workingDirectory)}`);
           if (!inspectRes.ok || cancelled) return;
           const inspectData = await inspectRes.json();
@@ -202,6 +203,7 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
           setIsAssistantProject(isAssistant);
           setWorkspaceMismatchPath(null);
           // Assistant project: show assistant panel instead of file tree
+          setIsAssistantWorkspace(isAssistant);
           if (isAssistant) {
             setFileTreeOpen(false);
             setAssistantPanelOpen(true);
