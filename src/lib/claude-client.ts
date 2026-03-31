@@ -430,6 +430,10 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
         sessionProviderId: options.sessionProviderId,
       });
 
+      // Accumulate stderr lines for error classification on crash.
+      // Declared outside try/catch so the catch block can access it.
+      const stderrForClassifier: string[] = [];
+
       try {
         const resolvedWorkingDirectory = resolveWorkingDirectory([
           { path: workingDirectory, source: 'requested' },
@@ -639,13 +643,21 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
         }
 
         // Pass through SDK-specific options from ClaudeStreamOptions
-        if (thinking) {
+        // sdkProxyOnly providers (MiniMax, Kimi, GLM, etc.) proxy to their own models
+        // which don't support extended thinking — skip it to prevent CLI crashes.
+        if (thinking && !resolved.sdkProxyOnly) {
           queryOptions.thinking = thinking;
         }
         // Always set effort explicitly to prevent user-level ~/.claude/settings.json
         // from injecting 'high' effort via settingSources inheritance.
         // UI-selected effort takes priority; otherwise default to 'medium'.
-        queryOptions.effort = effort || 'medium';
+        // Exception: sdkProxyOnly providers (MiniMax, Kimi, GLM) may not support
+        // the effort parameter — skip it to avoid CLI crashes.
+        if (!resolved.sdkProxyOnly) {
+          queryOptions.effort = effort || 'medium';
+        } else if (effort) {
+          queryOptions.effort = effort; // only apply if user explicitly set it
+        }
         if (outputFormat) {
           queryOptions.outputFormat = outputFormat;
         }
@@ -796,7 +808,8 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
         // normal stdout. Notifications are derived from stream messages instead
         // (task_notification, result). TodoWrite sync uses tool_use → tool_result.
 
-        // Capture real-time stderr output from Claude Code process
+        // Capture real-time stderr output from Claude Code process.
+        // Also accumulated in stderrForClassifier (declared above try) for error classification.
         queryOptions.stderr = (data: string) => {
           // Diagnostic: log raw stderr data length to server console
           console.log(`[stderr] received ${data.length} bytes, first 200 chars:`, data.slice(0, 200).replace(/[\x00-\x1F\x7F]/g, '?'));
@@ -813,6 +826,7 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
             .replace(/\n{3,}/g, '\n\n')                // Collapse multiple blank lines
             .trim();
           if (cleaned) {
+            stderrForClassifier.push(cleaned);
             controller.enqueue(formatSSE({
               type: 'tool_output',
               data: cleaned,
@@ -1250,7 +1264,10 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
       } catch (error) {
         const rawMessage = error instanceof Error ? error.message : 'Unknown error';
         // Log full error details for debugging (visible in terminal / dev tools)
-        const stderrContent = error instanceof Error ? (error as { stderr?: string }).stderr : undefined;
+        // Prefer accumulated stderr from the callback; fall back to error.stderr property
+        const stderrContent = stderrForClassifier.length > 0
+          ? stderrForClassifier.join('\n')
+          : (error instanceof Error ? (error as { stderr?: string }).stderr : undefined);
         console.error('[claude-client] Stream error:', {
           message: rawMessage,
           stack: error instanceof Error ? error.stack : undefined,

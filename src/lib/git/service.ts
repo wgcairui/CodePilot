@@ -213,9 +213,6 @@ export async function getLog(cwd: string, limit = 50): Promise<GitLogEntry[]> {
 }
 
 export async function commit(cwd: string, message: string): Promise<string> {
-  // Stage all changes
-  await runGit(['add', '-A'], { cwd, timeoutMs: 15000 });
-
   // Check if there are staged changes.
   // `git diff --cached --quiet` exits 0 = clean, exits 1 = has staged changes.
   // runGit rejects on any non-zero exit. We treat rejection as "has changes".

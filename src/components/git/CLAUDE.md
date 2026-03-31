@@ -20,3 +20,4 @@
   — `git diff HEAD` 获取 diff；新仓库无 HEAD 时降级到 `--cached`
 - Phosphor 图标（Plus/Minus/Trash 等）全量报 `deprecated` TS 警告——是库层面预存问题，不影响编译，忽略即可
 - `FileChangeItem` loading 模式：loading=true 时用 spinner 替换整个按钮区；`callApi` 的 `if (loading) return` 是并发锁唯一来源，ActionButton 不需要 `disabled={loading}`
+- `service.ts` 的 `commit()` **不自动 stage**：只提交已暂存文件；`git diff --cached --quiet` 返回 0 = 无暂存则抛 "Nothing to commit"
