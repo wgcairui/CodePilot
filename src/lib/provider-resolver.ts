@@ -528,14 +528,11 @@ function buildResolution(
     ? { ...catalogPreset.defaultEnvOverrides, ...dbEnvOverrides }
     : dbEnvOverrides;
 
-  // Fall back to catalog preset's defaultRoleModels when DB has no role mappings.
-  // This ensures sdkProxyOnly providers (MiniMax, Xiaomi MiMo, etc.) get correct
-  // ANTHROPIC_MODEL / ANTHROPIC_DEFAULT_*_MODEL env vars even when role_models_json
-  // was saved as '{}' by the preset connect dialog.
-  if (!roleModels.default && !roleModels.sonnet) {
-    if (catalogPreset?.defaultRoleModels) {
-      roleModels = { ...catalogPreset.defaultRoleModels, ...roleModels };
-    }
+  // Merge catalog defaultRoleModels as base — DB values take priority (spread order).
+  // Always merge (not just when DB has no roles) so individual missing slots (e.g. haiku)
+  // are filled even when DB has a partial role_models_json like {"default":"MiniMax-M2.7"}.
+  if (catalogPreset?.defaultRoleModels) {
+    roleModels = { ...catalogPreset.defaultRoleModels, ...roleModels };
   }
 
   // Get available models: DB provider_models take priority, then catalog defaults

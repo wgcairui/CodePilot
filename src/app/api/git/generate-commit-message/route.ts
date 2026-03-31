@@ -63,8 +63,12 @@ function detectLanguage(cwd: string): 'en' | 'zh' {
 function pickSmallModel(resolved: ReturnType<typeof resolveProvider>): string {
   if (resolved.roleModels.haiku) return resolved.roleModels.haiku;
   if (resolved.roleModels.small) return resolved.roleModels.small;
-  if (resolved.protocol === 'anthropic') return 'claude-haiku-4-5-20251001';
-  return resolved.model || 'claude-haiku-4-5-20251001';
+  // Only fall back to Anthropic haiku for real Anthropic providers — sdkProxyOnly providers
+  // (MiniMax, Kimi, GLM, etc.) also use protocol='anthropic' but don't have this model.
+  if (resolved.protocol === 'anthropic' && !resolved.sdkProxyOnly) {
+    return 'claude-haiku-4-5-20251001';
+  }
+  return resolved.model || resolved.availableModels[0]?.modelId || 'claude-haiku-4-5-20251001';
 }
 
 export async function POST(req: NextRequest) {
@@ -108,12 +112,16 @@ ${fileList || '(no file list)'}
 Diff:
 ${diff || '(no diff)'}`;
 
+    const selectedModel = pickSmallModel(resolved);
     const message = await generateTextFromProvider({
       providerId: resolved.provider?.id || '',
-      model: pickSmallModel(resolved),
+      model: selectedModel,
       system,
       prompt,
-      maxTokens: 256,
+      // Use 4096 to accommodate thinking models (e.g. MiniMax-M2.7) that consume
+      // tokens on internal reasoning before generating the actual commit message.
+      // 256 was too low — thinking alone can exhaust it, leaving no tokens for text.
+      maxTokens: 4096,
     });
 
     return NextResponse.json({ message: message.trim() });
