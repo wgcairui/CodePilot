@@ -87,8 +87,6 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'No AI provider configured' }, { status: 400 });
     }
 
-    const model = pickSmallModel(resolved);
-
     const langInstruction = lang === 'zh'
       ? 'Write the commit message in Chinese (中文).'
       : 'Write the commit message in English.';
@@ -112,7 +110,7 @@ ${diff || '(no diff)'}`;
 
     const message = await generateTextFromProvider({
       providerId: resolved.provider?.id || '',
-      model,
+      model: pickSmallModel(resolved),
       system,
       prompt,
       maxTokens: 256,

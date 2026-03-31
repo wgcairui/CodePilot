@@ -53,6 +53,12 @@ export interface ResolvedProvider {
   availableModels: CatalogModel[];
   /** Settings sources for Claude Code SDK */
   settingSources: string[];
+  /**
+   * True for providers that only support the Claude Code SDK proxy wire protocol
+   * (e.g. Kimi, GLM, MiniMax). These providers cannot be used with the Vercel AI SDK
+   * streamText / generateText path.
+   */
+  sdkProxyOnly: boolean;
 }
 
 // ── Public API ──────────────────────────────────────────────────
@@ -337,8 +343,12 @@ export function toAiSdkConfig(
   const normaliseAnthropicBaseUrl = (url: string | undefined): string | undefined => {
     if (!url) return undefined;
     const cleaned = url.replace(/\/+$/, '');
-    if (cleaned === 'https://api.anthropic.com') return 'https://api.anthropic.com/v1';
-    return cleaned;
+    // @ai-sdk/anthropic appends /messages to the base URL, so it must end with /v1
+    // to produce the correct /v1/messages path (Anthropic API spec).
+    // CC's @anthropic-ai/sdk constructs /v1/messages internally and stores URLs
+    // without the /v1 suffix, so we add it here for the AI SDK path only.
+    if (cleaned.endsWith('/v1')) return cleaned;
+    return `${cleaned}/v1`;
   };
 
   switch (protocol) {
@@ -494,6 +504,7 @@ function buildResolution(
       hasCredentials: envHasCredentials,
       availableModels: envModels,
       settingSources: ['user', 'project', 'local'],
+      sdkProxyOnly: false,
     };
   }
 
@@ -506,14 +517,16 @@ function buildResolution(
   const envOverrides = safeParseJson(provider.env_overrides_json || provider.extra_env);
   let roleModels = safeParseJson(provider.role_models_json) as RoleModels;
 
+  // Look up catalog preset — used for roleModels fallback and sdkProxyOnly flag.
+  const catalogPreset = findPresetForLegacy(provider.base_url, provider.provider_type, protocol);
+
   // Fall back to catalog preset's defaultRoleModels when DB has no role mappings.
   // This ensures sdkProxyOnly providers (MiniMax, Xiaomi MiMo, etc.) get correct
   // ANTHROPIC_MODEL / ANTHROPIC_DEFAULT_*_MODEL env vars even when role_models_json
   // was saved as '{}' by the preset connect dialog.
   if (!roleModels.default && !roleModels.sonnet) {
-    const preset = findPresetForLegacy(provider.base_url, provider.provider_type, protocol);
-    if (preset?.defaultRoleModels) {
-      roleModels = { ...preset.defaultRoleModels, ...roleModels };
+    if (catalogPreset?.defaultRoleModels) {
+      roleModels = { ...catalogPreset.defaultRoleModels, ...roleModels };
     }
   }
 
@@ -585,8 +598,10 @@ function buildResolution(
   // Has credentials?
   const hasCredentials = !!(provider.api_key) || authStyle === 'env_only';
 
-  // Settings sources — always include 'user' so SDK can load skills from
-  // ~/.claude/skills/. Env override conflicts are handled by envOverrides.
+  // Settings sources for main chat (streamClaude). Includes 'user' so hooks,
+  // plugins, and skills from ~/.claude/ are available. Note: generateTextViaSdk
+  // intentionally overrides this to ['project', 'local'] to prevent
+  // ~/.claude/settings.json env vars from shadowing provider credentials.
   const settingSources = ['user', 'project', 'local'];
 
   return {
@@ -602,6 +617,7 @@ function buildResolution(
     hasCredentials,
     availableModels,
     settingSources,
+    sdkProxyOnly: catalogPreset?.sdkProxyOnly ?? false,
   };
 }
 

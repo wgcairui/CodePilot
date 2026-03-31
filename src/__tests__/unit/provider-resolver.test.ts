@@ -304,6 +304,7 @@ describe('Provider Resolver', () => {
         hasCredentials: true,
         availableModels: [],
         settingSources: ['project', 'local'],
+        sdkProxyOnly: false,
       };
 
       const env = toClaudeCodeEnv({ PATH: '/usr/bin' }, resolved);
@@ -342,6 +343,7 @@ describe('Provider Resolver', () => {
         hasCredentials: true,
         availableModels: [],
         settingSources: ['project', 'local'],
+        sdkProxyOnly: false,
       };
 
       const env = toClaudeCodeEnv({ PATH: '/usr/bin', ANTHROPIC_API_KEY: 'old-key' }, resolved);
@@ -384,6 +386,7 @@ describe('Provider Resolver', () => {
         hasCredentials: true,
         availableModels: [],
         settingSources: ['project', 'local'],
+        sdkProxyOnly: false,
       };
 
       const env = toClaudeCodeEnv({ PATH: '/usr/bin', SOME_CUSTOM_VAR: 'old' }, resolved);
@@ -427,6 +430,7 @@ describe('Provider Resolver', () => {
         hasCredentials: true,
         availableModels: [],
         settingSources: ['project', 'local'],
+        sdkProxyOnly: false,
       };
 
       const env = toClaudeCodeEnv({}, resolved);
@@ -449,6 +453,7 @@ describe('Provider Resolver', () => {
         hasCredentials: false,
         availableModels: [],
         settingSources: ['user', 'project', 'local'],
+        sdkProxyOnly: false,
       };
 
       const env = toClaudeCodeEnv({
@@ -480,6 +485,7 @@ describe('Provider Resolver', () => {
         hasCredentials: true,
         availableModels: [],
         settingSources: ['project', 'local'],
+        sdkProxyOnly: false,
       };
 
       const config = toAiSdkConfig(resolved);
@@ -509,6 +515,7 @@ describe('Provider Resolver', () => {
         hasCredentials: true,
         availableModels: [],
         settingSources: ['project', 'local'],
+        sdkProxyOnly: false,
       };
 
       const config = toAiSdkConfig(resolved);
@@ -539,6 +546,7 @@ describe('Provider Resolver', () => {
         hasCredentials: true,
         availableModels: [],
         settingSources: ['project', 'local'],
+        sdkProxyOnly: false,
       };
 
       const config = toAiSdkConfig(resolved);
@@ -568,6 +576,7 @@ describe('Provider Resolver', () => {
         hasCredentials: true,
         availableModels: [],
         settingSources: ['project', 'local'],
+        sdkProxyOnly: false,
       };
 
       const config = toAiSdkConfig(resolved);
@@ -594,6 +603,7 @@ describe('Provider Resolver', () => {
         hasCredentials: true,
         availableModels: [],
         settingSources: ['project', 'local'],
+        sdkProxyOnly: false,
       };
 
       const config = toAiSdkConfig(resolved, 'opus');
@@ -620,6 +630,7 @@ describe('Provider Resolver', () => {
         hasCredentials: true,
         availableModels: [],
         settingSources: ['project', 'local'],
+        sdkProxyOnly: false,
       };
 
       const config = toAiSdkConfig(resolved);
@@ -727,6 +738,7 @@ describe('Env Provider AI SDK Consistency', () => {
         hasCredentials: true,
         availableModels: [],
         settingSources: ['user', 'project', 'local'],
+        sdkProxyOnly: false,
       };
       const config = toAiSdkConfig(resolved);
       assert.equal(config.sdkType, 'anthropic');
@@ -769,6 +781,7 @@ describe('Upstream Model ID Mapping', () => {
         { modelId: 'opus', upstreamModelId: 'glm-5.1', displayName: 'GLM-5.1' },
       ],
       settingSources: ['project', 'local'],
+      sdkProxyOnly: false,
     };
 
     // Without override — uses resolved.upstreamModel
@@ -804,6 +817,7 @@ describe('Upstream Model ID Mapping', () => {
       hasCredentials: true,
       availableModels: [],
       settingSources: ['project', 'local'],
+      sdkProxyOnly: false,
     };
 
     const env = toClaudeCodeEnv({}, resolved);
@@ -907,6 +921,7 @@ describe('Entry Point Resolution Contract', () => {
         hasCredentials: true,
         availableModels: [],
         settingSources: ['user', 'project', 'local'],
+        sdkProxyOnly: false,
       };
       const config = toAiSdkConfig(resolved);
       assert.equal(config.sdkType, 'anthropic');
@@ -946,6 +961,7 @@ describe('Entry Point Resolution Contract', () => {
         { modelId: 'sonnet', upstreamModelId: 'glm-5-turbo', displayName: 'GLM-5-Turbo' },
       ],
       settingSources: ['project', 'local'],
+      sdkProxyOnly: false,
     };
 
     // AI SDK path: toAiSdkConfig should use upstreamModel

@@ -35,6 +35,7 @@ export async function* streamTextFromProvider(params: StreamTextParams): AsyncIt
     throw new Error('No text generation provider available. Please configure a provider in Settings.');
   }
 
+
   const config = toAiSdkConfig(resolved, params.model);
 
   // Inject process env if needed (bedrock/vertex)

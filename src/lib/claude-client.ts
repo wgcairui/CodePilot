@@ -314,15 +314,21 @@ export async function generateTextViaSdk(params: {
   // Auto-timeout after 60s to prevent indefinite hangs
   const timeoutId = setTimeout(() => abortController.abort(), 60_000);
 
+  const stderrChunks: string[] = [];
   const queryOptions: Options = {
     cwd: os.homedir(),
     abortController,
     permissionMode: 'bypassPermissions',
     allowDangerouslySkipPermissions: true,
     env: sanitizeEnv(sdkEnv),
-    settingSources: resolved.settingSources as Options['settingSources'],
+    // Exclude 'user' to prevent ~/.claude/settings.json env section from
+    // overriding our provider credentials (e.g. personal ANTHROPIC_BASE_URL
+    // shadowing MiniMax/Kimi base URL). One-shot generation doesn't need
+    // user-level hooks or plugins.
+    settingSources: ['project', 'local'] as Options['settingSources'],
     systemPrompt: params.system,
     maxTurns: 1,
+    stderr: (data: string) => { stderrChunks.push(data); },
   };
 
   if (params.model) {
@@ -347,16 +353,27 @@ export async function generateTextViaSdk(params: {
 
   // Iterate through all messages; the last one with type 'result' has the answer
   let resultText = '';
+  let resultIsError = false;
   try {
     for await (const msg of conversation) {
       if (msg.type === 'result' && 'result' in msg) {
-        resultText = (msg as SDKResultSuccess).result || '';
+        const resultMsg = msg as SDKResultSuccess;
+        resultText = resultMsg.result || '';
+        resultIsError = resultMsg.is_error ?? false;
       }
     }
   } catch (err) {
     clearTimeout(timeoutId);
     if (abortController.signal.aborted && !(params.abortSignal?.aborted)) {
       throw new Error('SDK query timed out after 60s');
+    }
+    // If CC emitted an error result before exiting with code 1, surface that message
+    if (resultText) {
+      throw new Error(resultText.slice(0, 300));
+    }
+    const stderrOutput = stderrChunks.join('').trim();
+    if (stderrOutput && err instanceof Error) {
+      throw new Error(`${err.message} | stderr: ${stderrOutput.slice(0, 300)}`);
     }
     throw err;
   }
@@ -365,6 +382,10 @@ export async function generateTextViaSdk(params: {
 
   if (!resultText) {
     throw new Error('SDK query returned no result');
+  }
+
+  if (resultIsError) {
+    throw new Error(resultText.slice(0, 300));
   }
 
   return resultText;

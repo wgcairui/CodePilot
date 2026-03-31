@@ -2,6 +2,7 @@
 
 import { useState, useCallback } from "react";
 import { GitBranch, GitCommit, CloudArrowUp, ArrowUp, ArrowLeft, Plus, Minus, ArrowsCounterClockwise, Trash } from "@/components/ui/icon";
+import { Spinner } from "@/components/ui/spinner";
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "@/hooks/useTranslation";
 import { usePanel } from "@/hooks/usePanel";
@@ -231,23 +232,25 @@ function FileChangeItem({ file, cwd, onRefresh }: FileChangeItemProps) {
       </span>
       <span className="truncate text-foreground/80 flex-1 min-w-0">{file.path}</span>
 
-      {/* Action buttons — visible on hover */}
-      <div className={`shrink-0 flex items-center gap-0.5 ${loading ? 'opacity-50' : 'opacity-0 group-hover:opacity-100'} transition-opacity`}>
-        {file.staged ? (
+      {/* Action buttons — visible on hover; spinner when loading */}
+      <div className={`shrink-0 flex items-center gap-0.5 ${loading ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'} transition-opacity`}>
+        {loading ? (
+          <Spinner className="size-[11px] text-muted-foreground" />
+        ) : file.staged ? (
           // Staged: unstage only
-          <ActionButton title="取消暂存" onClick={handleUnstage} disabled={loading}>
+          <ActionButton title="取消暂存" onClick={handleUnstage} disabled={false}>
             <Minus size={11} />
           </ActionButton>
         ) : (
           <>
             {/* Unstaged tracked or untracked: stage + discard */}
-            <ActionButton title="暂存" onClick={handleStage} disabled={loading}>
+            <ActionButton title="暂存" onClick={handleStage} disabled={false}>
               <Plus size={11} />
             </ActionButton>
             <ActionButton
               title={file.status === 'untracked' ? '删除文件' : '撤销修改'}
               onClick={handleDiscard}
-              disabled={loading}
+              disabled={false}
               destructive
             >
               {file.status === 'untracked' ? <Trash size={11} /> : <ArrowsCounterClockwise size={11} />}
