@@ -53,4 +53,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return () => { ipcRenderer.removeListener('terminal:exit', listener); };
     },
   },
+  remote: {
+    connect: (config: unknown) => ipcRenderer.invoke('remote:connect', config),
+    disconnect: (hostId: string) => ipcRenderer.invoke('remote:disconnect', hostId),
+    getStatus: (hostId: string) => ipcRenderer.invoke('remote:get-status', hostId),
+    checkEnv: (hostId: string) => ipcRenderer.invoke('remote:check-env', hostId),
+    deployAgent: (hostId: string) => ipcRenderer.invoke('remote:deploy-agent', hostId),
+    startAgent: (hostId: string, port: number) => ipcRenderer.invoke('remote:start-agent', hostId, port),
+    isAgentRunning: (hostId: string, port: number) => ipcRenderer.invoke('remote:is-agent-running', hostId, port),
+    agentSend: (hostId: string, msg: unknown) => ipcRenderer.invoke('remote:agent-send', hostId, msg),
+    onStatusChanged: (cb: (state: unknown) => void) => {
+      const l = (_e: unknown, d: unknown) => cb(d);
+      ipcRenderer.on('remote:status-changed', l);
+      return () => ipcRenderer.removeListener('remote:status-changed', l);
+    },
+    onAgentMessage: (cb: (data: { hostId: string; msg: unknown }) => void) => {
+      const l = (_e: unknown, d: unknown) => cb(d as { hostId: string; msg: unknown });
+      ipcRenderer.on('remote:agent-message', l);
+      return () => ipcRenderer.removeListener('remote:agent-message', l);
+    },
+  },
 });

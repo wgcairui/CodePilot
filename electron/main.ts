@@ -5,6 +5,11 @@ import fs from 'fs';
 import net from 'net';
 import os from 'os';
 import { TerminalManager } from './terminal-manager';
+import { sshManager } from '../src/lib/remote/ssh-manager';
+import { remoteAgentClient } from '../src/lib/remote/agent-client';
+import { checkRemoteEnv, buildInstallPlan, deployAgent, startRemoteAgent, isAgentRunning } from '../src/lib/remote/setup-checker';
+import type { RemoteHostConfig } from '../src/lib/remote/types';
+import type { ClientMessage } from '../remote-agent/src/types';
 
 /**
  * Return a copy of process.env without __NEXT_PRIVATE_* variables.
@@ -1076,6 +1081,70 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('terminal:kill', async (_event, id: string) => {
     terminalManager.kill(id);
+  });
+
+  // ── Remote Connect ────────────────────────────────────────────────
+  sshManager.onStatusChange(async (state) => {
+    mainWindow?.webContents.send('remote:status-changed', state);
+    if (state.status === 'connected' && state.localPort) {
+      try { await remoteAgentClient.connect(state.hostId, state.localPort); }
+      catch (err) { console.error('[remote] WebSocket connect failed:', err); }
+    } else if (state.status === 'disconnected') {
+      remoteAgentClient.disconnect(state.hostId);
+    }
+  });
+
+  remoteAgentClient.onMessage((hostId, msg) => {
+    mainWindow?.webContents.send('remote:agent-message', { hostId, msg });
+  });
+
+  remoteAgentClient.onNeedReconnect((hostId) => {
+    console.log(`[remote] Agent WS closed for ${hostId}, awaiting SSH reconnect`);
+  });
+
+  ipcMain.handle('remote:connect', (_e, config: RemoteHostConfig) => sshManager.connect(config));
+  ipcMain.handle('remote:disconnect', (_e, hostId: string) => sshManager.disconnect(hostId));
+  ipcMain.handle('remote:get-status', (_e, hostId: string) => ({
+    status: sshManager.getStatus(hostId),
+    localPort: sshManager.getLocalPort(hostId),
+  }));
+  ipcMain.handle('remote:agent-send', (_e, hostId: string, msg: unknown) => {
+    remoteAgentClient.send(hostId, msg as ClientMessage);
+  });
+
+  function getLocalAgentPath(): string {
+    return app.isPackaged
+      ? path.join(process.resourcesPath, 'remote-agent', 'dist', 'agent.js')
+      : path.join(__dirname, '../../remote-agent/dist/agent.js');
+  }
+  function getLocalAgentVersion(): string {
+    try {
+      const first = fs.readFileSync(getLocalAgentPath(), 'utf-8').split('\n')[0];
+      return first.match(/CODEPILOT_AGENT_VERSION=(\S+)/)?.[1] ?? '0.0.0';
+    } catch { return '0.0.0'; }
+  }
+
+  ipcMain.handle('remote:check-env', async (_e, hostId: string) => {
+    const client = sshManager.getRawClient(hostId);
+    if (!client) throw new Error('Not connected');
+    const result = await checkRemoteEnv(client);
+    const plan = buildInstallPlan(result, getLocalAgentVersion());
+    return { result, plan };
+  });
+  ipcMain.handle('remote:deploy-agent', async (_e, hostId: string) => {
+    const client = sshManager.getRawClient(hostId);
+    if (!client) throw new Error('Not connected');
+    await deployAgent(client, getLocalAgentPath());
+  });
+  ipcMain.handle('remote:start-agent', async (_e, hostId: string, port: number) => {
+    const client = sshManager.getRawClient(hostId);
+    if (!client) throw new Error('Not connected');
+    await startRemoteAgent(client, port);
+  });
+  ipcMain.handle('remote:is-agent-running', async (_e, hostId: string, port: number) => {
+    const client = sshManager.getRawClient(hostId);
+    if (!client) throw new Error('Not connected');
+    return isAgentRunning(client, port);
   });
 
   // --- End terminal IPC handlers ---
