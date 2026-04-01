@@ -1,0 +1,16 @@
+{
+  "name": "codepilot-remote-agent",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "npx tsx build.ts"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0",
+    "tsx": "^4.0.0"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}
