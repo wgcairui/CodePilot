@@ -1,4 +1,4 @@
-import { describe, it, after } from 'node:test';
+import { describe, it, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
@@ -7,8 +7,13 @@ import fs from 'node:fs';
 const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codepilot-test-'));
 process.env.CLAUDE_GUI_DATA_DIR = tmpDir;
 
-/* eslint-disable @typescript-eslint/no-require-imports */
-const { getDb, createRemoteHost, listRemoteHosts } = require('../../lib/db');
+let getDb: typeof import('../../lib/db').getDb;
+let createRemoteHost: typeof import('../../lib/db').createRemoteHost;
+let listRemoteHosts: typeof import('../../lib/db').listRemoteHosts;
+
+before(async () => {
+  ({ getDb, createRemoteHost, listRemoteHosts } = await import('../../lib/db'));
+});
 
 describe('remote_hosts DB', () => {
   it('remote_hosts table exists', () => {
