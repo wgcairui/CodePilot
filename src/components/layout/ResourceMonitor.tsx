@@ -12,7 +12,6 @@ interface ServerStats {
   totalSessions: number;
   dbSizeMb: number;
   rssMb: number;
-  heapUsedMb: number;
 }
 
 interface GCResult {
@@ -31,6 +30,9 @@ export function ResourceMonitor() {
   const [isReclaiming, setIsReclaiming] = useState(false);
   const [lastResult, setLastResult] = useState<string | null>(null);
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Ref keeps handleReclaim stable across serverStats updates
+  const serverStatsRef = useRef<ServerStats | null>(null);
+  useEffect(() => { serverStatsRef.current = serverStats; }, [serverStats]);
 
   const fetchStats = useCallback(async () => {
     setActiveStreams(getActiveSessionIds().length);
@@ -55,10 +57,11 @@ export function ResourceMonitor() {
     };
   }, [open, fetchStats]);
 
-  // Keep badge up-to-date even when popover is closed
+  // Keep badge up-to-date even when popover is closed; skip setState when value unchanged
   useEffect(() => {
     const timer = setInterval(() => {
-      setActiveStreams(getActiveSessionIds().length);
+      const count = getActiveSessionIds().length;
+      setActiveStreams(prev => (prev !== count ? count : prev));
     }, 5_000);
     return () => clearInterval(timer);
   }, []);
@@ -66,21 +69,22 @@ export function ResourceMonitor() {
   const handleReclaim = useCallback(async () => {
     setIsReclaiming(true);
     setLastResult(null);
+    const { count } = forceGCAllCompleted();
     try {
-      const { count } = forceGCAllCompleted();
       const res = await fetch("/api/system/gc", { method: "POST" });
-      const data: GCResult = res.ok ? await res.json() : { sessionsDeleted: 0, dbSizeMb: serverStats?.dbSizeMb ?? 0, rssMb: serverStats?.rssMb ?? 0 };
-      setLastResult(
-        t("system.reclaimResult", { streams: String(count), sessions: String(data.sessionsDeleted) })
-      );
+      const data: GCResult = res.ok
+        ? await res.json()
+        : { sessionsDeleted: 0, dbSizeMb: serverStatsRef.current?.dbSizeMb ?? 0, rssMb: serverStatsRef.current?.rssMb ?? 0 };
+      setLastResult(t("system.reclaimResult", { streams: String(count), sessions: String(data.sessionsDeleted) }));
       setServerStats(prev => prev ? { ...prev, dbSizeMb: data.dbSizeMb, rssMb: data.rssMb } : prev);
       setActiveStreams(getActiveSessionIds().length);
     } catch {
-      // best effort
+      // Show client-side GC result even if server call fails
+      setLastResult(t("system.reclaimResult", { streams: String(count), sessions: "0" }));
     } finally {
       setIsReclaiming(false);
     }
-  }, [t, serverStats]);
+  }, [t]);
 
   return (
     <Popover open={open} onOpenChange={setOpen}>

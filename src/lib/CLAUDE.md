@@ -38,3 +38,15 @@
 ## Bridge 子模块
 
 见 `bridge/CLAUDE.md`
+
+## stream-session-manager.ts（⚠️ 仅客户端）
+
+⚠️ 该模块是 **Electron 渲染进程**的客户端单例，只能从 hooks/组件中调用。
+从 Next.js API Route 导入会访问空的 `globalThis` Map（无报错但无效）。
+- 流 GC、活跃流读取必须在前端组件中直接调用
+- 需要服务端数据（DB 大小、session 数）时，通过 API Route 获取后传回前端
+
+## db.ts 新增 helper 的注意事项
+
+⚠️ `DB_PATH` 是私有常量，不能直接导出。
+需要操作 DB 文件路径时，封装成 helper 函数暴露（如 `getDbSizeMb()`）。

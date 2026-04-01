@@ -668,24 +668,22 @@ export async function respondToPermission(
  */
 export function forceGCAllCompleted(): { count: number } {
   const map = getStreamsMap();
-  let count = 0;
+  const toDelete: string[] = [];
   for (const stream of map.values()) {
     if (stream.snapshot.phase === 'active') continue;
-    // Clear accumulated data
     stream.accumulatedText = '';
     stream.toolUsesArray = [];
     stream.toolResultsArray = [];
     stream.toolOutputAccumulated = '';
     stream.toolTimeoutInfo = null;
     stream.rewindPoints = [];
-    // Cancel pending GC timer and remove immediately
     if (stream.gcTimer) clearTimeout(stream.gcTimer);
     stream.gcTimer = null;
     cleanupTimers(stream);
-    map.delete(stream.sessionId);
-    count++;
+    toDelete.push(stream.sessionId);
   }
-  return { count };
+  for (const id of toDelete) map.delete(id);
+  return { count: toDelete.length };
 }
 
 export function clearSnapshot(sessionId: string): void {
