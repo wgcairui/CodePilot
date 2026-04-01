@@ -1175,3 +1175,23 @@ export interface WeixinContextTokenRecord {
   contextToken: string;
   updatedAt: string;
 }
+
+// ==========================================
+// Remote Host Types
+// ==========================================
+
+export interface RemoteHost {
+  id: string;
+  name: string;
+  host: string;
+  port: number;
+  username: string;
+  authType: 'key' | 'password';
+  keyPath?: string;
+  workDir: string;
+  agentPort: number;
+  status: 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'failed';
+  lastSeen?: number;
+}
+
+export type RemoteConnectionStatus = RemoteHost['status'];

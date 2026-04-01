@@ -875,6 +875,32 @@ function migrateDb(db: Database.Database): void {
       }
     }
   } catch { /* table may not exist yet */ }
+
+  // ── remote_hosts ──────────────────────────────────────────────────
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS remote_hosts (
+      id          TEXT PRIMARY KEY,
+      name        TEXT NOT NULL,
+      host        TEXT NOT NULL,
+      port        INTEGER NOT NULL DEFAULT 22,
+      username    TEXT NOT NULL,
+      auth_type   TEXT NOT NULL DEFAULT 'key',
+      key_path    TEXT,
+      password    TEXT,
+      work_dir    TEXT NOT NULL DEFAULT '',
+      agent_port  INTEGER NOT NULL DEFAULT 39099,
+      status      TEXT NOT NULL DEFAULT 'disconnected',
+      last_seen   INTEGER,
+      created_at  INTEGER NOT NULL
+    );
+  `);
+
+  const sessionCols = db.prepare('PRAGMA table_info(chat_sessions)').all() as { name: string }[];
+  if (!sessionCols.some(c => c.name === 'remote_host_id')) {
+    safeAddColumn(db, 'ALTER TABLE chat_sessions ADD COLUMN remote_host_id TEXT');
+  }
+  // Reset all remote host statuses on startup
+  db.prepare("UPDATE remote_hosts SET status = 'disconnected'").run();
 }
 
 // ==========================================
@@ -2608,6 +2634,66 @@ export function cleanupOldSessions(daysOld: number): { deletedCount: number } {
     )
     .run(daysOld);
   return { deletedCount: result.changes };
+}
+
+
+// ── Remote Host helpers ───────────────────────────────────────────
+
+export interface RemoteHostRow {
+  id: string;
+  name: string;
+  host: string;
+  port: number;
+  username: string;
+  auth_type: 'key' | 'password';
+  key_path: string | null;
+  password: string | null; // safeStorage encrypted base64
+  work_dir: string;
+  agent_port: number;
+  status: 'disconnected' | 'connecting' | 'connected' | 'reconnecting' | 'failed';
+  last_seen: number | null;
+  created_at: number;
+}
+
+export function createRemoteHost(input: {
+  name: string; host: string; port?: number; username: string;
+  authType: 'key' | 'password'; keyPath?: string; password?: string; workDir: string;
+}): RemoteHostRow {
+  const db = getDb();
+  const id = crypto.randomUUID();
+  db.prepare(
+    'INSERT INTO remote_hosts (id,name,host,port,username,auth_type,key_path,password,work_dir,created_at) VALUES (?,?,?,?,?,?,?,?,?,?)'
+  ).run(id, input.name, input.host, input.port ?? 22, input.username,
+        input.authType, input.keyPath ?? null, input.password ?? null, input.workDir, Date.now());
+  return db.prepare('SELECT * FROM remote_hosts WHERE id = ?').get(id) as RemoteHostRow;
+}
+
+export function listRemoteHosts(): RemoteHostRow[] {
+  return getDb().prepare('SELECT * FROM remote_hosts ORDER BY created_at ASC').all() as RemoteHostRow[];
+}
+
+export function getRemoteHost(id: string): RemoteHostRow | null {
+  return getDb().prepare('SELECT * FROM remote_hosts WHERE id = ?').get(id) as RemoteHostRow | null;
+}
+
+export function updateRemoteHost(id: string, updates: Partial<Pick<RemoteHostRow,
+  'name' | 'host' | 'port' | 'username' | 'auth_type' | 'key_path' | 'password' | 'work_dir' | 'agent_port'
+>>): void {
+  if (Object.keys(updates).length === 0) return;
+  const fields = Object.keys(updates).map(k => k + ' = ?').join(', ');
+  getDb().prepare('UPDATE remote_hosts SET ' + fields + ' WHERE id = ?').run(...Object.values(updates), id);
+}
+
+export function deleteRemoteHost(id: string): void {
+  getDb().prepare('DELETE FROM remote_hosts WHERE id = ?').run(id);
+}
+
+export function setRemoteHostStatus(
+  id: string,
+  status: RemoteHostRow['status']
+): void {
+  getDb().prepare('UPDATE remote_hosts SET status = ?, last_seen = ? WHERE id = ?')
+    .run(status, Date.now(), id);
 }
 
 registerShutdownHandlers();
