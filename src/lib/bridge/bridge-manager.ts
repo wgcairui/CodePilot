@@ -30,6 +30,7 @@ import {
   validateMode,
 } from './security/validators';
 import { ChannelPluginAdapter } from '../channels/channel-plugin-adapter';
+import type { FeishuChannelPlugin } from '../channels/feishu';
 
 /**
  * Extract the real platform chat_id from a potentially synthetic thread-session address.
@@ -696,11 +697,18 @@ async function handleMessage(
   }
 
   // Build onToolEvent callback for card tool progress
-  let onToolEvent: ((event: any) => void) | undefined;
+  interface ToolEvent {
+    type: string;
+    id?: string;
+    name?: string;
+    tool_use_id?: string;
+    is_error?: boolean;
+  }
+  let onToolEvent: ((event: ToolEvent) => void) | undefined;
   if (cardController) {
-    onToolEvent = (event: any) => {
+    onToolEvent = (event: ToolEvent) => {
       if (event.type === 'tool_use') {
-        cardToolCalls.push({ id: event.id, name: event.name, status: 'running' });
+        cardToolCalls.push({ id: event.id!, name: event.name!, status: 'running' });
       } else if (event.type === 'tool_result') {
         const tc = cardToolCalls.find((t) => t.id === event.tool_use_id);
         if (tc) tc.status = event.is_error ? 'error' : 'complete';
@@ -926,7 +934,7 @@ async function handleCommand(
       // directories across this channel type (not isolated per chat).
       // If multi-user / chat-level isolation is needed in the future,
       // this should be scoped by userId or chatId instead.
-      const bindings = router.listBindings(msg.address.channelType as any);
+      const bindings = router.listBindings(msg.address.channelType);
       const uniqueDirs = [...new Set(
         bindings
           .filter((b) => b.active)
@@ -1043,14 +1051,14 @@ async function handleCommand(
         break;
       }
       const plugin = adapter.getPlugin();
-      if (!plugin.getCardStreamController && !(plugin as any).meta?.channelType) {
+      if (!plugin.getCardStreamController && !plugin.meta?.channelType) {
         response = 'History is not available.';
         break;
       }
       // Use message-actions if the plugin has Feishu-type capabilities
       try {
         const { readMessages, readThreadMessages } = await import('../channels/feishu/message-actions');
-        const restClient = (plugin as any).gateway?.getRestClient?.();
+        const restClient = (plugin as FeishuChannelPlugin)._gateway?.getRestClient?.();
         if (!restClient) {
           response = 'Channel not connected.';
           break;
@@ -1108,7 +1116,7 @@ async function handleCommand(
       try {
         const { searchMessages } = await import('../channels/feishu/message-actions');
         const plugin = adapter.getPlugin();
-        const restClient = (plugin as any).gateway?.getRestClient?.();
+        const restClient = (plugin as FeishuChannelPlugin)._gateway?.getRestClient?.();
         if (!restClient) {
           response = 'Channel not connected.';
           break;
@@ -1150,7 +1158,7 @@ async function handleCommand(
             break;
           }
           const plugin = adapter.getPlugin();
-          const config = (plugin as any).getConfig?.();
+          const config = (plugin as FeishuChannelPlugin).getConfig?.();
           if (!config) {
             response = '❌ Feishu plugin not configured.\n\nPlease set App ID and App Secret in CodePilot settings, or use /feishu auth.';
             break;
@@ -1180,7 +1188,7 @@ async function handleCommand(
             break;
           }
           const plugin = adapter.getPlugin();
-          const config = (plugin as any).getConfig?.();
+          const config = (plugin as FeishuChannelPlugin).getConfig?.();
           if (!config) {
             response = '❌ App credentials not configured.\n\nPlease configure App ID and App Secret in CodePilot Settings → Bridge → Feishu.';
             break;
@@ -1208,7 +1216,7 @@ async function handleCommand(
             break;
           }
           const plugin = adapter.getPlugin();
-          const config = (plugin as any).getConfig?.();
+          const config = (plugin as FeishuChannelPlugin).getConfig?.();
           const lines = ['🔍 Feishu Doctor', ''];
 
           // Config check

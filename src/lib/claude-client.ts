@@ -546,6 +546,35 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
           queryOptions.mcpServers = toSdkMcpConfig(mcpServers);
         }
 
+        // Memory MCP: always registered in assistant mode for memory search/retrieval.
+        // Unlike other MCPs which are keyword-gated, memory search is a core assistant capability.
+        {
+          const assistantWorkspacePath = getSetting('assistant_workspace_path');
+          if (assistantWorkspacePath && resolvedWorkingDirectory.path === assistantWorkspacePath) {
+            const { createMemorySearchMcpServer, MEMORY_SEARCH_SYSTEM_PROMPT } = await import('@/lib/memory-search-mcp');
+            queryOptions.mcpServers = {
+              ...(queryOptions.mcpServers || {}),
+              'codepilot-memory': createMemorySearchMcpServer(assistantWorkspacePath),
+            };
+            if (queryOptions.systemPrompt && typeof queryOptions.systemPrompt === 'object' && 'append' in queryOptions.systemPrompt) {
+              queryOptions.systemPrompt.append = (queryOptions.systemPrompt.append || '') + '\n\n' + MEMORY_SEARCH_SYSTEM_PROMPT;
+            }
+          }
+        }
+
+        // Notification + Schedule MCP: globally available in all contexts
+        {
+          const { createNotificationMcpServer, NOTIFICATION_MCP_SYSTEM_PROMPT } =
+            await import('@/lib/notification-mcp');
+          queryOptions.mcpServers = {
+            ...(queryOptions.mcpServers || {}),
+            'codepilot-notify': createNotificationMcpServer(),
+          };
+          if (queryOptions.systemPrompt && typeof queryOptions.systemPrompt === 'object' && 'append' in queryOptions.systemPrompt) {
+            queryOptions.systemPrompt.append = (queryOptions.systemPrompt.append || '') + '\n\n' + NOTIFICATION_MCP_SYSTEM_PROMPT;
+          }
+        }
+
         // Widget guidelines: progressive loading strategy.
         // The system prompt always includes WIDGET_SYSTEM_PROMPT with format rules.
         // The MCP server (detailed design specs) is only registered when the
@@ -779,8 +808,10 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
             data: JSON.stringify(permEvent),
           }));
 
-          // Notify via Telegram (fire-and-forget)
-          notifyPermissionRequest(toolName, input as Record<string, unknown>, telegramOpts).catch(() => {});
+          // Notify via Telegram (fire-and-forget) — skip for auto-trigger turns
+          if (!autoTrigger) {
+            notifyPermissionRequest(toolName, input as Record<string, unknown>, telegramOpts).catch(() => {});
+          }
 
           // Notify runtime status change
           onRuntimeStatusChange?.('waiting_permission');
@@ -1192,7 +1223,9 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
                       message: taskMsg.summary || '',
                     }),
                   }));
-                  notifyGeneric(title, taskMsg.summary || '', telegramOpts).catch(() => {});
+                  if (!autoTrigger) {
+                    notifyGeneric(title, taskMsg.summary || '', telegramOpts).catch(() => {});
+                  }
                 }
               }
               break;
@@ -1245,7 +1278,10 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
                   type: 'status',
                   data: JSON.stringify({ notification: true, title: errTitle, message: errMsg }),
                 }));
-                notifyGeneric(errTitle, errMsg, telegramOpts).catch(() => {});
+                // Skip Telegram for auto-trigger turns (onboarding/heartbeat)
+                if (!autoTrigger) {
+                  notifyGeneric(errTitle, errMsg, telegramOpts).catch(() => {});
+                }
               }
               break;
             }

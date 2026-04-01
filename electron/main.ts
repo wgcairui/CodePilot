@@ -1,4 +1,4 @@
-import { app, BrowserWindow, nativeImage, dialog, session, utilityProcess, ipcMain, shell, Tray, Menu } from 'electron';
+import { app, BrowserWindow, Notification, nativeImage, dialog, session, utilityProcess, ipcMain, shell, Tray, Menu } from 'electron';
 import path from 'path';
 import { execFileSync, spawn, ChildProcess } from 'child_process';
 import fs from 'fs';
@@ -39,6 +39,7 @@ let serverExitCode: number | null = null;
 let userShellEnv: Record<string, string> = {};
 let isQuitting = false;
 let tray: Tray | null = null;
+let bgNotifyTimer: ReturnType<typeof setInterval> | null = null;
 
 // --- Install orchestrator ---
 interface InstallStep {
@@ -227,6 +228,79 @@ function destroyTray(): void {
   if (tray) {
     tray.destroy();
     tray = null;
+  }
+  stopBgNotifyPoll();
+}
+
+/**
+ * Parse notification API response. Canonical version: src/lib/bg-notify-parser.ts
+ */
+function parseBgNotifications(json: string): Array<{ title: string; body: string; priority: string }> {
+  try {
+    const parsed = JSON.parse(json);
+    const notifications: Array<{ title: string; body: string; priority: string }> = parsed.notifications || [];
+    return notifications.filter((n: { title: string }) => n.title);
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Background notification poller — runs in main process when no renderer window
+ * is open (tray-only mode). Drains the server-side notification queue and shows
+ * native Notification directly, bypassing the renderer's useNotificationPoll.
+ */
+function startBgNotifyPoll(): void {
+  if (bgNotifyTimer) return;
+  const port = serverPort || 3000;
+
+  bgNotifyTimer = setInterval(async () => {
+    // Stop polling if a renderer window exists (frontend will handle it)
+    if (BrowserWindow.getAllWindows().length > 0) {
+      stopBgNotifyPoll();
+      return;
+    }
+
+    try {
+      const http = await import('http');
+      const data = await new Promise<string>((resolve, reject) => {
+        const req = http.get(`http://127.0.0.1:${port}/api/tasks/notify`, (res) => {
+          let body = '';
+          res.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+          res.on('end', () => resolve(body));
+        });
+        req.on('error', reject);
+        req.setTimeout(3000, () => { req.destroy(); reject(new Error('timeout')); });
+      });
+
+      const notifications = parseBgNotifications(data);
+      for (const notif of notifications) {
+        try {
+          const notification = new Notification({
+            title: notif.title,
+            body: notif.body || '',
+          });
+          notification.on('click', () => {
+            // Re-open the main window when user clicks the notification
+            if (BrowserWindow.getAllWindows().length === 0) {
+              createWindow(`http://127.0.0.1:${port}`);
+            }
+            mainWindow?.show();
+            mainWindow?.focus();
+          });
+          notification.show();
+        } catch { /* best effort */ }
+      }
+    } catch {
+      // Server may not be reachable — ignore
+    }
+  }, 5000);
+}
+
+function stopBgNotifyPoll(): void {
+  if (bgNotifyTimer) {
+    clearInterval(bgNotifyTimer);
+    bgNotifyTimer = null;
   }
 }
 
@@ -541,6 +615,23 @@ function createWindow(url?: string) {
   }
 
   mainWindow = new BrowserWindow(windowOptions);
+
+  // External links: open in system default browser instead of Electron
+  mainWindow.webContents.setWindowOpenHandler(({ url: targetUrl }) => {
+    if (targetUrl.startsWith('http://') || targetUrl.startsWith('https://')) {
+      shell.openExternal(targetUrl);
+      return { action: 'deny' };
+    }
+    return { action: 'deny' };
+  });
+  mainWindow.webContents.on('will-navigate', (event, targetUrl) => {
+    // Allow navigating within the app (localhost dev server)
+    const appOrigin = new URL(mainWindow!.webContents.getURL()).origin;
+    if (new URL(targetUrl).origin !== appOrigin) {
+      event.preventDefault();
+      shell.openExternal(targetUrl);
+    }
+  });
 
   mainWindow.loadURL(url || LOADING_HTML);
 
@@ -1172,6 +1263,32 @@ app.whenReady().then(async () => {
 
   // --- End terminal IPC handlers ---
 
+  // --- Notification IPC handler ---
+  ipcMain.handle('notification:show', async (_event, options: {
+    title: string;
+    body: string;
+    onClick?: { type: string; payload: string };
+  }) => {
+    try {
+      const notification = new Notification({
+        title: options.title,
+        body: options.body || '',
+      });
+      if (options.onClick) {
+        notification.on('click', () => {
+          mainWindow?.show();
+          mainWindow?.focus();
+          mainWindow?.webContents.send('notification:click', options.onClick);
+        });
+      }
+      notification.show();
+      return true;
+    } catch (err) {
+      console.error('[notification] Failed to show:', err);
+      return false;
+    }
+  });
+
   try {
     let port: number;
 
@@ -1231,6 +1348,8 @@ app.on('window-all-closed', async () => {
   if (bridgeActive) {
     console.log('Bridge is active — keeping server alive in background with tray icon');
     createTray();
+    // Start background notification polling since no renderer will be available
+    startBgNotifyPoll();
     return;
   }
 

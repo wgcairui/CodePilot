@@ -9,6 +9,7 @@ import {
   DotOutline,
   ChartBar,
   Terminal,
+  Brain,
 } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -23,6 +24,7 @@ import { useClientPlatform } from '@/hooks/useClientPlatform';
 import { showToast } from '@/hooks/useToast';
 import { ResourceMonitor } from './ResourceMonitor';
 import { RemoteConnectionStatus } from '@/components/remote/ConnectionStatus';
+import { SPECIES_IMAGE_URL, EGG_IMAGE_URL, type Species } from '@/lib/buddy';
 
 export function UnifiedTopBar() {
   const {
@@ -38,11 +40,27 @@ export function UnifiedTopBar() {
     setTerminalOpen,
     dashboardPanelOpen,
     setDashboardPanelOpen,
+    assistantPanelOpen,
+    setAssistantPanelOpen,
+    isAssistantWorkspace,
     currentBranch,
     gitDirtyCount,
   } = usePanel();
   const { t } = useTranslation();
   const { isWindows } = useClientPlatform();
+  const [assistantName, setAssistantName] = useState('');
+  const [buddyEmoji, setBuddyEmoji] = useState('');
+  const [buddySpecies, setBuddySpecies] = useState('');
+
+  useEffect(() => {
+    if (!isAssistantWorkspace) return;
+    let cancelled = false;
+    fetch('/api/workspace/summary')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (!cancelled) { setAssistantName(data?.name || ''); setBuddyEmoji(data?.buddy?.emoji || ''); setBuddySpecies(data?.buddy?.species || ''); } })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [isAssistantWorkspace]);
   const pathname = usePathname();
 
   // Only show Git/terminal/panel controls on chat detail routes (/chat/[id]),
@@ -257,11 +275,18 @@ export function UnifiedTopBar() {
                     className={dashboardPanelOpen ? "" : "text-muted-foreground hover:text-foreground"}
                     onClick={() => setDashboardPanelOpen(!dashboardPanelOpen)}
                   >
-                    <ChartBar size={16} />
+                    {isAssistantWorkspace
+                      ? <img
+                          src={buddySpecies ? (SPECIES_IMAGE_URL[buddySpecies as Species] || '') : EGG_IMAGE_URL}
+                          alt="" width={16} height={16} className="rounded-sm"
+                        />
+                      : <ChartBar size={16} />}
                     <span className="sr-only">{t('topBar.dashboard')}</span>
                   </Button>
                 </TooltipTrigger>
-                <TooltipContent side="bottom">{t('topBar.dashboard')}</TooltipContent>
+                <TooltipContent side="bottom">
+                  {isAssistantWorkspace ? 'Assistant' : t('topBar.dashboard')}
+                </TooltipContent>
               </Tooltip>
 
               <RemoteConnectionStatus />

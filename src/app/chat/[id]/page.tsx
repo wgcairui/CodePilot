@@ -37,10 +37,10 @@ export default function ChatSessionPage({ params }: ChatSessionPageProps) {
 
     async function loadSession() {
       try {
-        const res = await fetch(`/api/chat/sessions/${id}`);
+        const sessionRes = await fetch(`/api/chat/sessions/${id}`);
         if (cancelled) return;
-        if (res.ok) {
-          const data: { session: ChatSession } = await res.json();
+        if (sessionRes.ok) {
+          const data: { session: ChatSession } = await sessionRes.json();
           if (cancelled) return;
           if (data.session.working_directory) {
             setWorkingDirectory(data.session.working_directory);
@@ -50,8 +50,14 @@ export default function ChatSessionPage({ params }: ChatSessionPageProps) {
           setSessionId(id);
           const title = data.session.title || t('chat.newConversation');
           setPanelSessionTitle(title);
-          setSessionModel(data.session.model || '');
-          setSessionProviderId(data.session.provider_id || '');
+
+          // Resolve model: session → global default → provider's first → localStorage → 'sonnet'
+          const { resolveSessionModel } = await import('@/lib/resolve-session-model');
+          if (cancelled) return;
+          const resolved = await resolveSessionModel(data.session.model || '', data.session.provider_id || '');
+          if (cancelled) return;
+          setSessionModel(resolved.model);
+          setSessionProviderId(resolved.providerId);
           setSessionPermissionProfile(data.session.permission_profile || 'default');
           setSessionMode((data.session.mode as 'code' | 'plan') || 'code');
         }
