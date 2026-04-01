@@ -37,9 +37,12 @@ async function buildElectron() {
     platform: 'node',
     target: 'node18',
     // 'electron' — runtime provided by Electron
-    // 'ssh2', 'cpu-features' — contain .node native binaries, cannot be bundled
     // 'better-sqlite3' — native addon, rebuilt for Electron ABI by after-pack.js
-    external: ['electron', 'ssh2', 'cpu-features', 'better-sqlite3'],
+    external: ['electron', 'better-sqlite3'],
+    // Treat .node native binaries as empty modules. ssh2 and cpu-features both
+    // wrap their native requires in try/catch and fall back to pure-JS implementations,
+    // so this is safe — ssh2 just uses slightly slower JS crypto instead of C++ acceleration.
+    loader: { '.node': 'empty' },
     sourcemap: true,
     minify: false,
   };
