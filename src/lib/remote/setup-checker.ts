@@ -1,20 +1,7 @@
 import type { Client } from 'ssh2';
 import fs from 'node:fs';
-
-export interface CheckResult {
-  os: 'Darwin' | 'Linux' | 'unknown';
-  nodeVersion: string | null;
-  claudeVersion: string | null;
-  agentVersion: string | null;
-}
-
-export interface InstallPlan {
-  needsNode: boolean;
-  needsClaude: boolean;
-  needsAgentDeploy: boolean;
-  nodeCommands: string[];
-  claudeCommands: string[];
-}
+import type { CheckResult, InstallPlan } from './types';
+export type { CheckResult, InstallPlan } from './types';
 
 async function sshExec(client: Client, cmd: string): Promise<string | null> {
   return new Promise(resolve => {
@@ -63,7 +50,7 @@ export function buildInstallPlan(result: CheckResult, localAgentVersion: string)
 }
 
 export async function deployAgent(client: Client, localAgentPath: string): Promise<void> {
-  const content = fs.readFileSync(localAgentPath);
+  const content = await fs.promises.readFile(localAgentPath);
   // 先获取远端 $HOME，避免用本地 process.env.HOME
   const remoteHome = (await sshExec(client, 'echo $HOME')) ?? '/root';
   return new Promise((resolve, reject) => {

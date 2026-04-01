@@ -59,6 +59,26 @@ interface ElectronTerminalAPI {
   onExit: (callback: (data: { id: string; code: number }) => void) => () => void;
 }
 
+interface ElectronRemoteAPI {
+  connect: (hostConfig: import('./index').RemoteHost) => Promise<void>;
+  disconnect: (hostId: string) => Promise<void>;
+  getStatus: (hostId: string) => Promise<import('./index').RemoteConnectionStatus>;
+  agentSend: (hostId: string, msg: unknown) => Promise<void>;
+  checkEnv: (hostId: string) => Promise<{
+    checkResult: import('../lib/remote/types').CheckResult;
+    installPlan: import('../lib/remote/types').InstallPlan;
+  }>;
+  deployAgent: (hostId: string) => Promise<void>;
+  startAgent: (hostId: string, agentPort: number) => Promise<void>;
+  isAgentRunning: (hostId: string, agentPort: number) => Promise<boolean>;
+  onStatusChanged: (
+    callback: (data: { hostId: string; status: import('./index').RemoteConnectionStatus; hostName?: string }) => void
+  ) => () => void;
+  onAgentMessage: (
+    callback: (data: { hostId: string; message: unknown }) => void
+  ) => () => void;
+}
+
 interface ElectronAPI {
   versions: {
     electron: string;
@@ -84,6 +104,7 @@ interface ElectronAPI {
   widget?: {
     exportPng: (html: string, width: number, isDark: boolean) => Promise<string>;
   };
+  remote?: ElectronRemoteAPI;
 }
 
 declare global {

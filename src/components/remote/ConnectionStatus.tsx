@@ -5,17 +5,9 @@ import { cn } from "@/lib/utils";
 import { useTranslation } from "@/hooks/useTranslation";
 import type { RemoteConnectionStatus } from "@/types";
 
-type ElectronRemoteAPI = {
-  onStatusChanged: (
-    callback: (data: { hostId: string; status: RemoteConnectionStatus; hostName?: string }) => void
-  ) => () => void;
-};
-
-function getElectronRemoteAPI(): ElectronRemoteAPI | null {
+function getElectronRemoteAPI() {
   if (typeof window === "undefined") return null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (window as unknown as { electronAPI?: { remote?: ElectronRemoteAPI } })
-    .electronAPI?.remote ?? null;
+  return window.electronAPI?.remote ?? null;
 }
 
 interface ConnectionEntry {

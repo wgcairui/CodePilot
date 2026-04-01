@@ -99,7 +99,7 @@ export function AddHostDialog({
       const url = editHost
         ? `/api/remote/hosts/${editHost.id}`
         : "/api/remote/hosts";
-      const method = editHost ? "PATCH" : "POST";
+      const method = editHost ? "PUT" : "POST";
 
       const res = await fetch(url, {
         method,

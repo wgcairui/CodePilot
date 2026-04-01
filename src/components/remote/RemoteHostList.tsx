@@ -9,23 +9,9 @@ import { AddHostDialog } from "./AddHostDialog";
 import { SetupGuide, type CheckResult, type InstallPlan } from "./SetupGuide";
 import type { RemoteHost, RemoteConnectionStatus } from "@/types";
 
-type ElectronRemoteAPI = {
-  connect: (hostConfig: RemoteHost) => Promise<void>;
-  disconnect: (hostId: string) => Promise<void>;
-  checkEnv: (hostId: string) => Promise<{ checkResult: CheckResult; installPlan: InstallPlan }>;
-  deployAgent: (hostId: string) => Promise<void>;
-  startAgent: (hostId: string, agentPort: number) => Promise<void>;
-  isAgentRunning: (hostId: string, agentPort: number) => Promise<boolean>;
-  onStatusChanged: (
-    callback: (data: { hostId: string; status: RemoteConnectionStatus }) => void
-  ) => () => void;
-};
-
-function getElectronRemoteAPI(): ElectronRemoteAPI | null {
+function getElectronRemoteAPI() {
   if (typeof window === "undefined") return null;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  return (window as unknown as { electronAPI?: { remote?: ElectronRemoteAPI } })
-    .electronAPI?.remote ?? null;
+  return window.electronAPI?.remote ?? null;
 }
 
 interface StatusDotProps {
@@ -86,7 +72,10 @@ export function RemoteHostList() {
     const api = getElectronRemoteAPI();
     if (!api) return;
     const cleanup = api.onStatusChanged(({ hostId, status }) => {
-      setStatusMap((prev) => ({ ...prev, [hostId]: status }));
+      setStatusMap((prev) => {
+        if (prev[hostId] === status) return prev;
+        return { ...prev, [hostId]: status };
+      });
     });
     return cleanup;
   }, []);
@@ -131,12 +120,7 @@ export function RemoteHostList() {
           return;
         }
 
-        // Step 4: Deploy agent if needed
-        if (installPlan.needsAgentDeploy) {
-          await api.deployAgent(host.id);
-        }
-
-        // Step 5: Start agent
+        // Step 4: Start agent
         await api.startAgent(host.id, host.agentPort);
 
         // Step 6: Poll until agent is running (max 10 attempts, 1s each)

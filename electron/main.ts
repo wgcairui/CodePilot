@@ -1124,12 +1124,14 @@ app.whenReady().then(async () => {
     } catch { return '0.0.0'; }
   }
 
+  const localAgentVersion = getLocalAgentVersion();
+
   ipcMain.handle('remote:check-env', async (_e, hostId: string) => {
     const client = sshManager.getRawClient(hostId);
     if (!client) throw new Error('Not connected');
-    const result = await checkRemoteEnv(client);
-    const plan = buildInstallPlan(result, getLocalAgentVersion());
-    return { result, plan };
+    const checkResult = await checkRemoteEnv(client);
+    const installPlan = buildInstallPlan(checkResult, localAgentVersion);
+    return { checkResult, installPlan };
   });
   ipcMain.handle('remote:deploy-agent', async (_e, hostId: string) => {
     const client = sshManager.getRawClient(hostId);
