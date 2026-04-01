@@ -54,7 +54,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     },
   },
   remote: {
-    connect: (config: unknown) => ipcRenderer.invoke('remote:connect', config),
+    connect: (hostId: string) => ipcRenderer.invoke('remote:connect', hostId),
     disconnect: (hostId: string) => ipcRenderer.invoke('remote:disconnect', hostId),
     getStatus: (hostId: string) => ipcRenderer.invoke('remote:get-status', hostId),
     checkEnv: (hostId: string) => ipcRenderer.invoke('remote:check-env', hostId),

@@ -62,14 +62,19 @@ export class SSHManager {
       readyTimeout: 20_000,
     };
 
-    if (config.authType === 'key' && config.keyPath) {
+    if (config.authType === 'key') {
+      const keyPath = config.keyPath || `${process.env.HOME ?? '/root'}/.ssh/id_rsa`;
       connectCfg.privateKey = fs.readFileSync(
-        config.keyPath.startsWith('~') ? config.keyPath.replace('~', process.env.HOME ?? '') : config.keyPath
+        keyPath.startsWith('~') ? keyPath.replace('~', process.env.HOME ?? '') : keyPath
       );
-    } else if (config.authType === 'password' && config.encryptedPassword) {
-      connectCfg.password = safeStorage.decryptString(
-        Buffer.from(config.encryptedPassword, 'base64')
-      );
+    } else if (config.authType === 'password') {
+      if (config.encryptedPassword) {
+        connectCfg.password = safeStorage.decryptString(
+          Buffer.from(config.encryptedPassword, 'base64')
+        );
+      } else if (config.password) {
+        connectCfg.password = config.password;
+      }
     }
 
     return new Promise((resolve, reject) => {

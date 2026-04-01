@@ -36,7 +36,10 @@ async function buildElectron() {
     bundle: true,
     platform: 'node',
     target: 'node18',
-    external: ['electron'],
+    // 'electron' — runtime provided by Electron
+    // 'ssh2', 'cpu-features' — contain .node native binaries, cannot be bundled
+    // 'better-sqlite3' — native addon, rebuilt for Electron ABI by after-pack.js
+    external: ['electron', 'ssh2', 'cpu-features', 'better-sqlite3'],
     sourcemap: true,
     minify: false,
   };

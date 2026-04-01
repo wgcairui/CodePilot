@@ -1102,7 +1102,28 @@ app.whenReady().then(async () => {
     console.log(`[remote] Agent WS closed for ${hostId}, awaiting SSH reconnect`);
   });
 
-  ipcMain.handle('remote:connect', (_e, config: RemoteHostConfig) => sshManager.connect(config));
+  ipcMain.handle('remote:connect', async (_e, hostId: string) => {
+    // Fetch credentials from Next.js API (avoids loading better-sqlite3 in the
+    // Electron main process, where its native ABI is incompatible in dev mode).
+    if (!serverPort) throw new Error('Server not ready');
+    const resp = await fetch(`http://127.0.0.1:${serverPort}/api/remote/hosts/${hostId}/credentials`);
+    if (!resp.ok) throw new Error(`Remote host not found: ${hostId}`);
+    const data = await resp.json() as {
+      id: string; host: string; port: number; username: string;
+      authType: 'key' | 'password'; keyPath?: string; password?: string; agentPort: number;
+    };
+    const config: RemoteHostConfig = {
+      id: data.id,
+      host: data.host,
+      port: data.port,
+      username: data.username,
+      authType: data.authType,
+      keyPath: data.keyPath,
+      password: data.password,
+      agentPort: data.agentPort,
+    };
+    return sshManager.connect(config);
+  });
   ipcMain.handle('remote:disconnect', (_e, hostId: string) => sshManager.disconnect(hostId));
   ipcMain.handle('remote:get-status', (_e, hostId: string) => ({
     status: sshManager.getStatus(hostId),

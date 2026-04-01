@@ -60,7 +60,7 @@ interface ElectronTerminalAPI {
 }
 
 interface ElectronRemoteAPI {
-  connect: (hostConfig: import('./index').RemoteHost) => Promise<void>;
+  connect: (hostId: string) => Promise<void>;
   disconnect: (hostId: string) => Promise<void>;
   getStatus: (hostId: string) => Promise<import('./index').RemoteConnectionStatus>;
   agentSend: (hostId: string, msg: unknown) => Promise<void>;

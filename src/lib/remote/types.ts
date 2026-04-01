@@ -21,6 +21,7 @@ export interface RemoteHostConfig {
   authType: 'key' | 'password';
   keyPath?: string;
   encryptedPassword?: string; // base64 of electron.safeStorage encrypted buffer
+  password?: string; // plain-text fallback (when safeStorage not used)
   agentPort: number;
 }
 

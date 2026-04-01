@@ -100,7 +100,7 @@ export function RemoteHostList() {
 
       try {
         // Step 1: SSH connect
-        await api.connect(host);
+        await api.connect(host.id);
 
         // Step 2: Wait for 'connected' status (via onStatusChanged subscription above)
         // Give it a brief moment for the status callback to fire
