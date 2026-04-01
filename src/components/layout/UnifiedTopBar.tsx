@@ -21,6 +21,7 @@ import { usePanel } from "@/hooks/usePanel";
 import { useTranslation } from "@/hooks/useTranslation";
 import { useClientPlatform } from '@/hooks/useClientPlatform';
 import { showToast } from '@/hooks/useToast';
+import { ResourceMonitor } from './ResourceMonitor';
 
 export function UnifiedTopBar() {
   const {
@@ -261,6 +262,8 @@ export function UnifiedTopBar() {
                 </TooltipTrigger>
                 <TooltipContent side="bottom">{t('topBar.dashboard')}</TooltipContent>
               </Tooltip>
+
+              <ResourceMonitor />
             </>
           )}
           {isWindows && <div style={{ width: 138 }} className="shrink-0" />}

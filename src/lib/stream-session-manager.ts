@@ -660,6 +660,34 @@ export async function respondToPermission(
 // Cleanup
 // ==========================================
 
+/**
+ * Immediately GC all non-active streams, clearing accumulated data and
+ * removing them from the manager map without waiting for the scheduled timer.
+ * Safe to call at any time — does not abort or affect active streams.
+ * Returns the number of streams freed.
+ */
+export function forceGCAllCompleted(): { count: number } {
+  const map = getStreamsMap();
+  let count = 0;
+  for (const stream of map.values()) {
+    if (stream.snapshot.phase === 'active') continue;
+    // Clear accumulated data
+    stream.accumulatedText = '';
+    stream.toolUsesArray = [];
+    stream.toolResultsArray = [];
+    stream.toolOutputAccumulated = '';
+    stream.toolTimeoutInfo = null;
+    stream.rewindPoints = [];
+    // Cancel pending GC timer and remove immediately
+    if (stream.gcTimer) clearTimeout(stream.gcTimer);
+    stream.gcTimer = null;
+    cleanupTimers(stream);
+    map.delete(stream.sessionId);
+    count++;
+  }
+  return { count };
+}
+
 export function clearSnapshot(sessionId: string): void {
   const stream = getStreamsMap().get(sessionId);
   if (stream && stream.snapshot.phase !== 'active') {

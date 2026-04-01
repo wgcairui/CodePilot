@@ -1088,6 +1088,17 @@ const zh: Record<TranslationKey, string> = {
   'topBar.commit': '提交全部',
   'topBar.push': '推送',
   'topBar.terminal': '终端',
+  'topBar.resources': '资源',
+
+  // ── System Resources ──────────────────────────────────────────
+  'system.title': '系统资源',
+  'system.activeStreams': '活跃流',
+  'system.totalSessions': 'Session 总数',
+  'system.database': '数据库',
+  'system.memory': '内存',
+  'system.reclaimMemory': '回收内存',
+  'system.reclaiming': '回收中...',
+  'system.reclaimResult': '已释放 {streams} 条流，清除 {sessions} 个旧会话',
 
   // ── Dashboard ─────────────────────────────────────────────────
   'dashboard.title': '看板',

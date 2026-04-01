@@ -16,6 +16,7 @@ export {
   CaretUp,
   CaretRight,
   ChartBar,
+  Gauge,
   ChatCircle,
   ChatCircleText,
   ChatsCircle,

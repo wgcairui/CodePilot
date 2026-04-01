@@ -2582,4 +2582,32 @@ function registerShutdownHandlers(): void {
   }
 }
 
+// ── Resource management helpers ──────────────────────────────────────────────
+
+/** Returns the current DB file size in MB. */
+export function getDbSizeMb(): number {
+  try {
+    return fs.statSync(DB_PATH).size / 1024 / 1024;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * Deletes sessions older than `daysOld` days that are not actively running.
+ * FK ON DELETE CASCADE automatically removes associated messages,
+ * permission_requests, and session_runtime_locks.
+ */
+export function cleanupOldSessions(daysOld: number): { deletedCount: number } {
+  const db = getDb();
+  const result = db
+    .prepare(
+      `DELETE FROM chat_sessions
+       WHERE runtime_status = 'idle'
+         AND updated_at < datetime('now', '-' || ? || ' days')`
+    )
+    .run(daysOld);
+  return { deletedCount: result.changes };
+}
+
 registerShutdownHandlers();

@@ -1091,6 +1091,17 @@ const en = {
   'topBar.commit': 'Commit All',
   'topBar.push': 'Push',
   'topBar.terminal': 'Terminal',
+  'topBar.resources': 'Resources',
+
+  // ── System Resources ──────────────────────────────────────────
+  'system.title': 'System Resources',
+  'system.activeStreams': 'Active streams',
+  'system.totalSessions': 'Sessions total',
+  'system.database': 'Database',
+  'system.memory': 'Memory',
+  'system.reclaimMemory': 'Reclaim Memory',
+  'system.reclaiming': 'Reclaiming...',
+  'system.reclaimResult': 'Freed {streams} streams, removed {sessions} sessions',
 
   // ── Dashboard ─────────────────────────────────────────────────
   'dashboard.title': 'Dashboard',
