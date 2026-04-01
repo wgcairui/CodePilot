@@ -98,6 +98,11 @@ npx tsx --test src/__tests__/unit/foo.test.ts
 **`/api/providers` 返回的 api_key 是 masked（`***...`）：**
 - 前端无法直接读取原始 key；需调用专用端点或后端复制逻辑
 
+**Remote Host SSH 隧道：** 见 [`src/lib/remote/`](./src/lib/remote/)
+- ⚠️ `remoteHost.*` i18n 前缀（不是 `remote.*`）— Bridge 功能已占用 `remote.title`
+- ⚠️ `deployAgent` 的远程路径用 SSH exec `echo $HOME` 获取，不能用本地 `process.env.HOME`
+- 本地隧道端口范围 39100–39199，`net.createServer` 探测；agent 端口 39200+
+
 ## 改动自查
 
 完成代码修改后，在提交前确认：
