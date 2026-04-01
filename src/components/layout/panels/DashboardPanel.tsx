@@ -628,10 +628,10 @@ function getRequiredMemories(rarity: string): number {
 
 function rarityBorderClass(rarity: string): string {
   switch (rarity) {
-    case 'legendary': return 'border-amber-500/30 shadow-amber-500/10 shadow-md';
-    case 'epic': return 'border-purple-500/30';
-    case 'rare': return 'border-blue-500/30';
-    case 'uncommon': return 'border-green-500/30';
+    case 'legendary': return 'border-amber-500/30 shadow-amber-500/10 shadow-md'; // lint-allow-raw-color: rarity gamification visual language
+    case 'epic': return 'border-purple-500/30'; // lint-allow-raw-color: rarity gamification visual language
+    case 'rare': return 'border-blue-500/30'; // lint-allow-raw-color: rarity gamification visual language
+    case 'uncommon': return 'border-green-500/30'; // lint-allow-raw-color: rarity gamification visual language
     default: return 'border-primary/10';
   }
 }

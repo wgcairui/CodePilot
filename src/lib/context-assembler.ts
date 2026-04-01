@@ -13,6 +13,7 @@
 import type { ChatSession } from '@/types';
 import { getSetting } from '@/lib/db';
 import { EGG_IMAGE_URL } from '@/lib/buddy';
+import { HEARTBEAT_TRIGGER_PHRASE } from '@/lib/heartbeat';
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -105,7 +106,7 @@ export async function assembleContext(config: ContextAssemblyConfig): Promise<As
 
         // Detect heartbeat auto-trigger by checking the actual prompt content,
         // not just the autoTrigger flag (which is also true for buddy-welcome).
-        const isHeartbeatTrigger = autoTrigger && userPrompt.includes('心跳检查');
+        const isHeartbeatTrigger = autoTrigger && userPrompt.includes(HEARTBEAT_TRIGGER_PHRASE);
 
         if (!state.onboardingComplete) {
           assistantProjectInstructions = buildOnboardingInstructions();

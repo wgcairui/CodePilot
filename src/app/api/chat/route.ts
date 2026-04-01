@@ -8,10 +8,7 @@ import { loadCodePilotMcpServers } from '@/lib/mcp-loader';
 import { assembleContext } from '@/lib/context-assembler';
 import type { SendMessageRequest, SSEEvent, TokenUsage, MessageContentBlock, FileAttachment, ClaudeStreamOptions, MediaBlock } from '@/types';
 import { saveMediaToLibrary } from '@/lib/media-saver';
-import { ensureSchedulerRunning } from '@/lib/task-scheduler';
-
-// Start the task scheduler on first API call
-ensureSchedulerRunning();
+import { HEARTBEAT_TRIGGER_PHRASE } from '@/lib/heartbeat';
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
@@ -243,7 +240,7 @@ export async function POST(request: NextRequest) {
     }, 60_000);
 
     // Save assistant message in background, with cleanup callback to release lock
-    const isHeartbeatTurn = !!autoTrigger && content.includes('心跳检查');
+    const isHeartbeatTurn = !!autoTrigger && content.includes(HEARTBEAT_TRIGGER_PHRASE);
     collectStreamResponse(streamForCollect, session_id, telegramNotifyOpts, () => {
       clearInterval(lockRenewalInterval);
       releaseSessionLock(session_id, lockId);

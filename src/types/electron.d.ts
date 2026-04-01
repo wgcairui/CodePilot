@@ -106,8 +106,8 @@ interface ElectronAPI {
   };
   remote?: ElectronRemoteAPI;
   notification?: {
-    show: (options: { title: string; body?: string; onClick?: string }) => Promise<void>;
-    onClick: (listener: (action: string) => void) => () => void;
+    show: (options: { title: string; body?: string; onClick?: { type: string; payload: string } }) => Promise<void>;
+    onClick: (listener: (action: { type: string; payload: string }) => void) => () => void;
   };
 }
 

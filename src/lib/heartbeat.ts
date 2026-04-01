@@ -121,6 +121,9 @@ export function shouldSkipDuplicate(
   return Date.now() - state.lastHeartbeatSentAt < 24 * 60 * 60 * 1000;
 }
 
+/** Trigger phrase used to detect a heartbeat turn in chat messages */
+export const HEARTBEAT_TRIGGER_PHRASE = '心跳检查';
+
 /** Default HEARTBEAT.md template content */
 export const HEARTBEAT_TEMPLATE = `# 心跳检查清单
 

@@ -231,10 +231,10 @@ export function getPeakStatHint(peakStat: StatName, lang: 'en' | 'zh' = 'zh'): s
 export function rarityColor(rarity: string): string {
   const colors: Record<string, string> = {
     common: 'text-muted-foreground',
-    uncommon: 'text-green-500',
-    rare: 'text-blue-500',
-    epic: 'text-purple-500',
-    legendary: 'text-amber-500',
+    uncommon: 'text-green-500', // lint-allow-raw-color: rarity gamification visual language
+    rare: 'text-blue-500', // lint-allow-raw-color: rarity gamification visual language
+    epic: 'text-purple-500', // lint-allow-raw-color: rarity gamification visual language
+    legendary: 'text-amber-500', // lint-allow-raw-color: rarity gamification visual language
   };
   return colors[rarity] ?? 'text-muted-foreground';
 }
