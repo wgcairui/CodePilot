@@ -25,6 +25,8 @@ export class SessionManager {
     };
     this.sessions.set(sessionId, state);
 
+    proc.stderr?.on('data', () => { /* drain stderr to prevent pipe buffer backpressure */ });
+
     proc.stdout?.on('data', (chunk: Buffer) => {
       for (const line of chunk.toString().split('\n').filter(Boolean)) {
         try {
@@ -36,6 +38,15 @@ export class SessionManager {
             state.clientWs.send(JSON.stringify({ type: 'event', sessionId, eventId, event }));
           }
         } catch { /* 非 JSON 行忽略 */ }
+      }
+    });
+
+    proc.on('error', (err) => {
+      state.status = 'error';
+      if (state.clientWs) {
+        state.clientWs.send(JSON.stringify({
+          type: 'session_error', sessionId, error: err.message
+        }));
       }
     });
 
