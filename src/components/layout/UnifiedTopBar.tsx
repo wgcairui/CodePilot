@@ -22,6 +22,7 @@ import { useTranslation } from "@/hooks/useTranslation";
 import { useClientPlatform } from '@/hooks/useClientPlatform';
 import { showToast } from '@/hooks/useToast';
 import { ResourceMonitor } from './ResourceMonitor';
+import { RemoteConnectionStatus } from '@/components/remote/ConnectionStatus';
 
 export function UnifiedTopBar() {
   const {
@@ -263,6 +264,7 @@ export function UnifiedTopBar() {
                 <TooltipContent side="bottom">{t('topBar.dashboard')}</TooltipContent>
               </Tooltip>
 
+              <RemoteConnectionStatus />
               <ResourceMonitor />
             </>
           )}
