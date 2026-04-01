@@ -123,7 +123,7 @@ async function isBridgeActive(): Promise<boolean> {
     return await new Promise<boolean>((resolve) => {
       const req = http.get(`http://127.0.0.1:${serverPort}/api/bridge`, (res: { statusCode?: number; on: (event: string, cb: (data?: Buffer) => void) => void }) => {
         let body = '';
-        res.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+        res.on('data', (chunk?: Buffer) => { if (chunk) body += chunk.toString(); });
         res.on('end', () => {
           try {
             const data = JSON.parse(body);
@@ -1094,11 +1094,11 @@ app.whenReady().then(async () => {
     }
   });
 
-  remoteAgentClient.onMessage((hostId, msg) => {
+  remoteAgentClient.onMessage((hostId: string, msg: unknown) => {
     mainWindow?.webContents.send('remote:agent-message', { hostId, msg });
   });
 
-  remoteAgentClient.onNeedReconnect((hostId) => {
+  remoteAgentClient.onNeedReconnect((hostId: string) => {
     console.log(`[remote] Agent WS closed for ${hostId}, awaiting SSH reconnect`);
   });
 
