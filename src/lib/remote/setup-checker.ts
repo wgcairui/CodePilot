@@ -64,12 +64,14 @@ export function buildInstallPlan(result: CheckResult, localAgentVersion: string)
 
 export async function deployAgent(client: Client, localAgentPath: string): Promise<void> {
   const content = fs.readFileSync(localAgentPath);
+  // 先获取远端 $HOME，避免用本地 process.env.HOME
+  const remoteHome = (await sshExec(client, 'echo $HOME')) ?? '/root';
   return new Promise((resolve, reject) => {
     client.sftp((err, sftp) => {
       if (err) { reject(err); return; }
       client.exec('mkdir -p ~/.codepilot', (e2) => {
         if (e2) { reject(e2); return; }
-        const remote = `${process.env.HOME ?? '/root'}/.codepilot/agent.js`;
+        const remote = `${remoteHome}/.codepilot/agent.js`;
         const ws = sftp.createWriteStream(remote);
         ws.on('close', resolve);
         ws.on('error', reject);
