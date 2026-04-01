@@ -127,7 +127,8 @@ export class SSHManager {
     }
     entry.status = 'reconnecting';
     this.emit(config.id, 'reconnecting', localPort);
-    const delay = Math.min(1000 * 2 ** entry.retryCount, MAX_RETRY_DELAY_MS);
+    // 退避序列：1→2→4→8→30s（第 4 次起固定 30s）
+    const delay = entry.retryCount >= 4 ? MAX_RETRY_DELAY_MS : 1000 * 2 ** entry.retryCount;
     entry.retryCount++;
     entry.retryTimer = setTimeout(async () => {
       try {
