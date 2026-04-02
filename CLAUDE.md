@@ -102,6 +102,8 @@ npx tsx --test src/__tests__/unit/foo.test.ts
 - ⚠️ `remoteHost.*` i18n 前缀（不是 `remote.*`）— Bridge 功能已占用 `remote.title`
 - ⚠️ `deployAgent` 的远程路径用 SSH exec `echo $HOME` 获取，不能用本地 `process.env.HOME`
 - 本地隧道端口范围 39100–39199，`net.createServer` 探测；agent 端口 39200+
+- ⚠️ `electron-rebuild` 会把 `better-sqlite3.node` 编译为 Electron ABI，导致 Next.js dev server 全 500（NODE_MODULE_VERSION 不匹配）。修复：`npm rebuild better-sqlite3`
+- ⚠️ `ssh2` 含 NAN-based `sshcrypto.node`，不能被 esbuild 直接 bundle。解决：`loader: { '.node': 'empty' }` —— ssh2 的 try/catch 会自动降级到纯 JS 实现
 
 ## 改动自查
 
