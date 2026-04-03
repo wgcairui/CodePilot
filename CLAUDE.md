@@ -102,6 +102,10 @@ npx tsx --test src/__tests__/unit/foo.test.ts
 - Buddy 图片已打包到 `public/buddy/*.png`，通过 `/buddy/cat.png` 等路径直接访问，无 CDN 依赖
 - `src/components/ui/buddy-avatar.tsx` — 统一渲染 buddy/egg 图片，内置 `onError` emoji fallback；所有地方应使用此组件而非裸 `<img src={SPECIES_IMAGE_URL[...]}>`
 
+**Select 在 flex 容器内的布局规则：**
+- `SelectTrigger` 必须加 `className="w-full"` 防止宽度坍缩
+- `SelectContent` 建议加 `className="max-w-sm"` 防止溢出变形
+
 **Turbopack 热更新残留（⚠️ 常见误判）：**
 - 修改 import 后 Fast Refresh 报 `ReferenceError: xxx is not defined`，通常是旧 chunk 残留，不是代码 bug
 - 修复：强制刷新（Chrome: Ctrl+Shift+R；CDP: `navigate_page reload ignoreCache:true`）

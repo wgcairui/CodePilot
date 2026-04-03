@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { SpinnerGap, CheckCircle, X, Trash } from "@/components/ui/icon";
 import { useTranslation } from "@/hooks/useTranslation";
 import type { WorkspaceInspectResult, ScheduledTask } from "@/types";
+import { ScheduledTaskDetailDialog } from "./ScheduledTaskDetailDialog";
 import { FilesTabPanel, TaxonomyTabPanel, IndexTabPanel, OrganizeTabPanel } from "./WorkspaceTabPanels";
 import { WorkspaceConfirmDialogs, type ConfirmDialogType } from "./WorkspaceConfirmDialogs";
 import { OnboardingCard, CheckInCard } from "./WorkspaceStatusCards";
@@ -51,6 +52,8 @@ export function AssistantWorkspaceSection() {
   const [showWizard, setShowWizard] = useState(false);
   const [summary, setSummary] = useState<WorkspaceSummary | null>(null);
   const [tasks, setTasks] = useState<ScheduledTask[]>([]);
+  const [selectedTaskId, setSelectedTaskId] = useState<string | null>(null);
+  const [channelBindings, setChannelBindings] = useState<{ channelType: string; chatId: string }[]>([]);
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const fetchWorkspace = useCallback(async () => {
@@ -88,6 +91,16 @@ export function AssistantWorkspaceSection() {
     } catch { /* ignore */ }
   }, []);
 
+  const fetchChannelBindings = useCallback(async () => {
+    try {
+      const res = await fetch("/api/bridge/bindings");
+      if (res.ok) {
+        const data = await res.json();
+        setChannelBindings(data.bindings ?? []);
+      }
+    } catch { /* ignore */ }
+  }, []);
+
   const fetchTaxonomy = useCallback(async () => {
     try {
       const res = await fetch("/api/settings/workspace");
@@ -116,8 +129,9 @@ export function AssistantWorkspaceSection() {
     if (workspace?.path && workspace.valid !== false) {
       fetchSummary();
       fetchTasks();
+      fetchChannelBindings();
     }
-  }, [workspace?.path, workspace?.valid, fetchSummary, fetchTasks]);
+  }, [workspace?.path, workspace?.valid, fetchSummary, fetchTasks, fetchChannelBindings]);
 
   useEffect(() => {
     if (workspace?.path && activeTab === 'taxonomy') fetchTaxonomy();
@@ -545,7 +559,11 @@ export function AssistantWorkspaceSection() {
             <div className="space-y-2">
               {tasks.map((task) => (
                 <div key={task.id} className="flex items-center justify-between text-xs border border-border/30 rounded px-3 py-2">
-                  <div className="flex-1 min-w-0">
+                  <button
+                    className="flex-1 min-w-0 text-left cursor-pointer"
+                    onClick={() => setSelectedTaskId(task.id)}
+                    title={t('assistant.taskDetails')}
+                  >
                     <span className="font-medium truncate block">{task.name}</span>
                     <span className="text-muted-foreground">
                       {task.schedule_value}
@@ -553,7 +571,7 @@ export function AssistantWorkspaceSection() {
                         <> &middot; {t('assistant.taskNextRun')}: {new Date(task.next_run).toLocaleString()}</>
                       )}
                     </span>
-                  </div>
+                  </button>
                   <div className="flex items-center gap-2 ml-2 shrink-0">
                     <span className={`px-1.5 py-0.5 rounded text-[10px] ${
                       task.status === 'active' ? 'bg-status-success-muted text-status-success-foreground' :
@@ -578,6 +596,15 @@ export function AssistantWorkspaceSection() {
           )}
         </div>
       )}
+
+      <ScheduledTaskDetailDialog
+        task={tasks.find(t => t.id === selectedTaskId) ?? null}
+        open={selectedTaskId !== null}
+        onOpenChange={(open) => { if (!open) setSelectedTaskId(null); }}
+        onDelete={handleDeleteTask}
+        onRefresh={fetchTasks}
+        bindings={channelBindings}
+      />
 
       {/* Tabbed Section: Files (default) + Advanced (Taxonomy / Index / Organize) */}
       {workspace?.path && workspace.valid !== false && (

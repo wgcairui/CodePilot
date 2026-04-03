@@ -195,6 +195,8 @@ async function executeDueTask(task: ScheduledTask, isSessionTask = false): Promi
       );
     }
 
+    await notifyBridge(task, isSessionTask, `✅ ${task.name}`, result);
+
     // Insert result as assistant message in the task's session (or latest assistant session)
     try {
       const { addMessage, getSetting, getLatestSessionByWorkingDirectory } = await import('@/lib/db');
@@ -260,6 +262,8 @@ async function executeDueTask(task: ScheduledTask, isSessionTask = false): Promi
         'urgent',
       );
     }
+
+    await notifyBridge(task, isSessionTask, `❌ ${task.name} (失败)`, errorMsg);
 
     // Insert error as assistant message in the task's session
     try {
@@ -365,6 +369,36 @@ async function sendTaskNotification(title: string, body: string, priority: 'low'
     await sendNotification({ title, body, priority });
   } catch {
     // Best effort — don't let notification failure affect task execution
+  }
+}
+
+/** Best-effort bridge push with guard — no-op when bridge fields are absent or isSessionTask. */
+async function notifyBridge(task: ScheduledTask, isSessionTask: boolean, title: string, body: string): Promise<void> {
+  if (!isSessionTask && task.bridge_channel_type && task.bridge_chat_id) {
+    await sendBridgeNotification(task.bridge_channel_type, task.bridge_chat_id, title, body).catch(() => {});
+  }
+}
+
+async function sendBridgeNotification(
+  channelType: string,
+  chatId: string,
+  title: string,
+  body: string,
+): Promise<void> {
+  try {
+    const { getAdapter } = await import('./bridge/bridge-manager');
+    const adapter = getAdapter(channelType);
+    if (!adapter) {
+      console.warn(`[scheduler] Bridge adapter "${channelType}" not running, skip push to ${chatId}`);
+      return;
+    }
+    const { deliver } = await import('./bridge/delivery-layer');
+    await deliver(adapter, {
+      address: { channelType, chatId },
+      text: `${title}\n\n${body}`,
+    });
+  } catch (err) {
+    console.warn('[scheduler] Bridge push failed:', err);
   }
 }
 

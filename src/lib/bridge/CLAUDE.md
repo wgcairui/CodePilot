@@ -9,6 +9,12 @@
 - Offset 安全水位：`fetchOffset`（API 调用）与 `committedOffset`（持久化）分离，仅 handleMessage 完成后才推进 committed
 - 新增 adapter 只需实现 `BaseChannelAdapter` + 调用 `registerAdapterFactory()` 自注册 + `adapters/index.ts` 加 import
 
+## 调度器 Bridge 推送（task-scheduler.ts）
+
+- `getAdapter(channelType)` 从 `bridge-manager.ts` **直接**导出（不是 `getBridgeManager().getAdapter()`）
+- ⚠️ WeChat chatId 本身含 `::` — 复合键 `channelType::chatId` 拆分必须用 `indexOf` 取第一个 `::`，不能用 `split('::')[0]`
+- Bridge 推送字段存为非规范化列（`bridge_channel_type` + `bridge_chat_id`），不用 FK — 绑定重建后任务配置仍有效
+
 ## 详细架构
 
 见 `docs/handover/bridge-system.md`

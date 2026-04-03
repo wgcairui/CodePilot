@@ -941,6 +941,9 @@ function migrateDb(db: Database.Database): void {
 
   // Migration: add permanent column for existing databases
   safeAddColumn(db, "ALTER TABLE scheduled_tasks ADD COLUMN permanent INTEGER NOT NULL DEFAULT 0");
+  // Migration: add bridge push columns for existing databases
+  safeAddColumn(db, "ALTER TABLE scheduled_tasks ADD COLUMN bridge_channel_type TEXT");
+  safeAddColumn(db, "ALTER TABLE scheduled_tasks ADD COLUMN bridge_chat_id TEXT");
 
   // Task execution history
   db.exec(`
@@ -2694,6 +2697,21 @@ export function insertTaskRunLog(log: { task_id: string; status: string; result?
   db.prepare('INSERT INTO task_run_logs (id, task_id, status, result, error, duration_ms) VALUES (?, ?, ?, ?, ?, ?)').run(
     id, log.task_id, log.status, log.result || null, log.error || null, log.duration_ms
   );
+}
+
+export function getTaskRunLogs(taskId: string, limit = 20): Array<{
+  id: string; task_id: string; status: string;
+  result: string | null; error: string | null;
+  duration_ms: number | null; created_at: string;
+}> {
+  const db = getDb();
+  return db.prepare(
+    'SELECT * FROM task_run_logs WHERE task_id = ? ORDER BY created_at DESC LIMIT ?'
+  ).all(taskId, limit) as Array<{
+    id: string; task_id: string; status: string;
+    result: string | null; error: string | null;
+    duration_ms: number | null; created_at: string;
+  }>;
 }
 
 export function deleteScheduledTask(id: string): boolean {

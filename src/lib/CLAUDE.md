@@ -49,6 +49,10 @@
 - 流 GC、活跃流读取必须在前端组件中直接调用
 - 需要服务端数据（DB 大小、session 数）时，通过 API Route 获取后传回前端
 
+## 定时任务日志（task_run_logs）
+
+⚠️ `task_run_logs` 仅在任务**完成后**写入 — 触发 "立即执行" 后日志不会立即出现，需轮询（建议 3s interval，最长 60s）
+
 ## db.ts 新增 helper 的注意事项
 
 ⚠️ `DB_PATH` 是私有常量，不能直接导出。

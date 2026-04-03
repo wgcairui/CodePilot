@@ -1240,6 +1240,18 @@ export interface ScheduledTask {
   session_id?: string;
   working_directory?: string;
   permanent: number;
+  bridge_channel_type?: string;
+  bridge_chat_id?: string;
   created_at: string;
   updated_at: string;
+}
+
+export interface TaskRunLog {
+  id: string;
+  task_id: string;
+  status: string;
+  result: string | null;
+  error: string | null;
+  duration_ms: number | null;
+  created_at: string;
 }
