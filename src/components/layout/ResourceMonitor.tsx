@@ -93,8 +93,8 @@ export function ResourceMonitor() {
           <PopoverTrigger asChild>
             <Button
               variant={open ? "secondary" : "ghost"}
-              size="icon-sm"
-              className={open ? "" : "text-muted-foreground hover:text-foreground"}
+              size={activeStreams > 0 ? "sm" : "icon-sm"}
+              className={`${activeStreams > 0 ? "h-7 gap-1 px-1.5" : ""} ${open ? "" : "text-muted-foreground hover:text-foreground"}`}
             >
               <Gauge size={16} />
               {activeStreams > 0 && (
