@@ -51,7 +51,10 @@
 
 ## 定时任务日志（task_run_logs）
 
-⚠️ `task_run_logs` 仅在任务**完成后**写入 — 触发 "立即执行" 后日志不会立即出现，需轮询（建议 3s interval，最长 60s）
+`task_run_logs` 在任务**启动时**立即写入 `status: 'running'`，执行中每秒更新 partial result，完成时 update 同一行为 `success`/`error`。
+- `insertTaskRunLog()` 返回 log `id`（`string`），配合 `updateTaskRunLog(id, updates)` 实现"启动写 log、完成时更新"的模式
+- 前端轮询策略：1s interval，检测到 running→terminal 状态变化时停止，超时上限 120s
+- `task_run_logs.status` 无 CHECK 约束，写 `'running'` 合法（schema 只有 NOT NULL）
 
 ## db.ts 新增 helper 的注意事项
 

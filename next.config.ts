@@ -13,7 +13,7 @@ const nextConfig: NextConfig = {
   experimental: {
     // Limit static page generation workers to prevent OOM during `next build`
     // Default is number of CPU cores (7+), which exhausts memory on constrained machines
-    cpus: 2,
+    cpus: 4,
   },
 };
 

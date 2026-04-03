@@ -72,8 +72,8 @@ export function ScheduledTaskDetailDialog({
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollCountRef = useRef(0);
 
-  const fetchLogs = useCallback(async (taskId: string): Promise<TaskRunLog[]> => {
-    setLoadingLogs(true);
+  const fetchLogs = useCallback(async (taskId: string, showSpinner = true): Promise<TaskRunLog[]> => {
+    if (showSpinner) setLoadingLogs(true);
     try {
       const res = await fetch(`/api/tasks/${taskId}/logs`);
       if (res.ok) {
@@ -83,7 +83,7 @@ export function ScheduledTaskDetailDialog({
         return fetched;
       }
     } catch { /* best effort */ }
-    finally { setLoadingLogs(false); }
+    finally { if (showSpinner) setLoadingLogs(false); }
     return [];
   }, []);
 
@@ -96,16 +96,37 @@ export function ScheduledTaskDetailDialog({
     setIsPolling(false);
   }, []);
 
+  // Start polling for log updates; stops when a terminal log appears (max 120s)
+  const startPolling = useCallback((taskId: string) => {
+    stopPolling();
+    pollCountRef.current = 0;
+    setIsPolling(true);
+    pollTimerRef.current = setInterval(async () => {
+      pollCountRef.current += 1;
+      const latest = await fetchLogs(taskId, false);
+      const hasRunning = latest.some(l => l.status === 'running');
+      const hasTerminal = latest.some(l => l.status === 'success' || l.status === 'error');
+      if (hasTerminal && !hasRunning) {
+        stopPolling();
+        return;
+      }
+      if (pollCountRef.current >= 120) stopPolling();
+    }, 1000);
+  }, [fetchLogs, stopPolling]);
+
   useEffect(() => {
     if (open && task) {
-      fetchLogs(task.id);
       setExpandedLogId(null);
       setEditing(false);
       setDraft(null);
       stopPolling();
+      fetchLogs(task.id).then(initialLogs => {
+        const hasRunning = initialLogs.some(l => l.status === 'running') || task.last_status === 'running';
+        if (hasRunning) startPolling(task.id);
+      });
     }
     if (!open) stopPolling();
-  }, [open, task, fetchLogs, stopPolling]);
+  }, [open, task, fetchLogs, stopPolling, startPolling]);
 
   // Clean up on unmount
   useEffect(() => () => stopPolling(), [stopPolling]);
@@ -175,25 +196,15 @@ export function ScheduledTaskDetailDialog({
   const handleRunNow = useCallback(async () => {
     if (!task) return;
     setRunningNow(true);
-    stopPolling();
+    let launched = false;
     try {
-      await fetch(`/api/tasks/${task.id}/run`, { method: "POST" });
+      const res = await fetch(`/api/tasks/${task.id}/run`, { method: "POST" });
+      if (res.ok) launched = true;
     } catch { /* best effort */ }
     finally { setRunningNow(false); }
 
-    // Poll logs every 3s; stops early once a terminal log appears (max 60s)
-    pollCountRef.current = 0;
-    setIsPolling(true);
-    pollTimerRef.current = setInterval(async () => {
-      pollCountRef.current += 1;
-      const latest = await fetchLogs(task.id);
-      if (latest.length > 0 && (latest[0].status === 'success' || latest[0].status === 'error')) {
-        stopPolling();
-        return;
-      }
-      if (pollCountRef.current >= 20) stopPolling();
-    }, 3000);
-  }, [task, fetchLogs, stopPolling]);
+    if (launched) startPolling(task.id);
+  }, [task, startPolling]);
 
   const handleDelete = useCallback(() => {
     if (!task) return;

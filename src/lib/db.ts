@@ -964,6 +964,7 @@ function migrateDb(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_task_run_logs_task_id ON task_run_logs(task_id);
   `);
+  safeAddColumn(db, "ALTER TABLE task_run_logs ADD COLUMN updated_at TEXT");
 }
 
 // ==========================================
@@ -2696,12 +2697,27 @@ export function updateScheduledTask(id: string, updates: Partial<ScheduledTask>)
   db.prepare(`UPDATE scheduled_tasks SET ${fields.join(', ')} WHERE id = ?`).run(...values);
 }
 
-export function insertTaskRunLog(log: { task_id: string; status: string; result?: string; error?: string; duration_ms: number }): void {
+export function insertTaskRunLog(log: { task_id: string; status: string; result?: string; error?: string; duration_ms?: number }): string {
   const db = getDb();
   const id = crypto.randomBytes(8).toString('hex');
   db.prepare('INSERT INTO task_run_logs (id, task_id, status, result, error, duration_ms) VALUES (?, ?, ?, ?, ?, ?)').run(
-    id, log.task_id, log.status, log.result || null, log.error || null, log.duration_ms
+    id, log.task_id, log.status, log.result || null, log.error || null, log.duration_ms ?? null
   );
+  return id;
+}
+
+export function updateTaskRunLog(id: string, updates: { status?: string; result?: string; error?: string; duration_ms?: number }): void {
+  const db = getDb();
+  const fields: string[] = [];
+  const values: unknown[] = [];
+  if (updates.status !== undefined) { fields.push('status = ?'); values.push(updates.status); }
+  if (updates.result !== undefined) { fields.push('result = ?'); values.push(updates.result); }
+  if (updates.error !== undefined) { fields.push('error = ?'); values.push(updates.error); }
+  if (updates.duration_ms !== undefined) { fields.push('duration_ms = ?'); values.push(updates.duration_ms); }
+  if (fields.length === 0) return;
+  fields.push("updated_at = datetime('now')");
+  values.push(id);
+  db.prepare(`UPDATE task_run_logs SET ${fields.join(', ')} WHERE id = ?`).run(...values);
 }
 
 export function getTaskRunLogs(taskId: string, limit = 20): Array<{

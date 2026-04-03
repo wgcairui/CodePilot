@@ -27,11 +27,11 @@
     "lint:colors": "! grep -rn --include='*.tsx' --include='*.ts' -E '(bg|text|border)-(green|emerald|red|orange|yellow|amber|blue)-(400|500|600|700)' src/components/ src/app/ --exclude-dir=ui --exclude-dir=ai-elements | grep -v 'lint-allow-raw-color'",
     "prepare": "node -e \"try{require('husky')()}catch(e){}\"",
     "electron:dev": "concurrently -k \"next dev\" \"wait-on http://localhost:3000 && electron .\"",
-    "electron:build": "next build && node scripts/build-electron.mjs",
-    "electron:pack": "npm run electron:build && electron-builder --config electron-builder.yml",
+    "electron:build": "rm -rf release/ .next/ && next build && node scripts/build-electron.mjs",
+    "electron:pack": "rm -rf release/ .next/ && npm run electron:build && electron-builder --config electron-builder.yml",
     "electron:pack:mac": "rm -rf release/ .next/ && npm run electron:build && electron-builder --mac --arm64 --config electron-builder.yml",
-    "electron:pack:win": "npm run electron:build && electron-builder --win --config electron-builder.yml",
-    "electron:pack:linux": "npm run electron:build && electron-builder --linux --config electron-builder.yml"
+    "electron:pack:win": "rm -rf release/ .next/ && npm run electron:build && electron-builder --win --config electron-builder.yml",
+    "electron:pack:linux": "rm -rf release/ .next/ && npm run electron:build && electron-builder --linux --config electron-builder.yml"
   },
   "lint-staged": {
     "*.{ts,tsx}": [

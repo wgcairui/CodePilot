@@ -143,7 +143,7 @@ export function stopScheduler(): void {
  * @param isSessionTask If true, skip SQLite writes and re-throw errors for caller handling.
  */
 async function executeDueTask(task: ScheduledTask, isSessionTask = false): Promise<void> {
-  const { updateScheduledTask, insertTaskRunLog } = await import('@/lib/db');
+  const { updateScheduledTask, insertTaskRunLog, updateTaskRunLog } = await import('@/lib/db');
   const startTime = Date.now();
 
   // Mark as running (skip for session tasks — they're not in SQLite)
@@ -151,9 +151,13 @@ async function executeDueTask(task: ScheduledTask, isSessionTask = false): Promi
     updateScheduledTask(task.id, { last_status: 'running' });
   }
 
+  // Insert a 'running' log entry immediately so the UI knows execution has started
+  const logId = isSessionTask ? null : (() => {
+    try { return insertTaskRunLog({ task_id: task.id, status: 'running' }); } catch { return null; }
+  })();
+
   try {
-    // Lightweight execution via text generation (no streaming UI needed)
-    const { generateTextFromProvider } = await import('./text-generator');
+    const { streamTextFromProvider } = await import('./text-generator');
     const { resolveProvider } = await import('./provider-resolver');
     const resolved = resolveProvider();
 
@@ -161,26 +165,51 @@ async function executeDueTask(task: ScheduledTask, isSessionTask = false): Promi
       throw new Error('No API credentials configured');
     }
 
-    const result = await generateTextFromProvider({
-      providerId: resolved.provider?.id || '',
-      model: resolved.upstreamModel || resolved.model || 'sonnet',
-      system: `You are executing a scheduled task. Be concise and direct.\nTask name: ${task.name}\nCurrent time: ${new Date().toLocaleString()}`,
-      prompt: task.prompt,
-      maxTokens: 1000,
-    });
+    // Stream and accumulate output; write partial result to DB every 1 second
+    let partialResult = '';
+    let lastWritten = '';
+    let updateTimer: ReturnType<typeof setInterval> | null = null;
+    if (logId) {
+      updateTimer = setInterval(() => {
+        if (partialResult && partialResult !== lastWritten) {
+          try {
+            updateTaskRunLog(logId, { result: partialResult.slice(0, 2000) });
+            lastWritten = partialResult;
+          } catch { /* best effort */ }
+        }
+      }, 1000);
+    }
+
+    try {
+      for await (const chunk of streamTextFromProvider({
+        providerId: resolved.provider?.id || '',
+        model: resolved.upstreamModel || resolved.model || 'sonnet',
+        system: `You are executing a scheduled task. Be concise and direct.\nTask name: ${task.name}\nCurrent time: ${new Date().toLocaleString()}`,
+        prompt: task.prompt,
+        maxTokens: 1000,
+      })) {
+        partialResult += chunk;
+      }
+    } finally {
+      if (updateTimer) clearInterval(updateTimer);
+    }
 
     // Success — update SQLite (skip for session tasks)
     if (!isSessionTask) {
       updateScheduledTask(task.id, {
         last_status: 'success',
-        last_result: result.slice(0, 2000),
+        last_result: partialResult.slice(0, 2000),
         last_run: new Date().toISOString(),
         last_error: undefined,
         consecutive_errors: 0,
       });
 
       try {
-        insertTaskRunLog({ task_id: task.id, status: 'success', result: result.slice(0, 2000), duration_ms: Date.now() - startTime });
+        if (logId) {
+          updateTaskRunLog(logId, { status: 'success', result: partialResult.slice(0, 2000), duration_ms: Date.now() - startTime });
+        } else {
+          insertTaskRunLog({ task_id: task.id, status: 'success', result: partialResult.slice(0, 2000), duration_ms: Date.now() - startTime });
+        }
       } catch { /* best effort logging */ }
 
       computeNextRun(task);
@@ -190,12 +219,12 @@ async function executeDueTask(task: ScheduledTask, isSessionTask = false): Promi
     if (task.notify_on_complete) {
       await sendTaskNotification(
         `✅ ${task.name}`,
-        result.slice(0, 200),
+        partialResult.slice(0, 200),
         task.priority as 'low' | 'normal' | 'urgent',
       );
     }
 
-    await notifyBridge(task, isSessionTask, `✅ ${task.name}`, result);
+    await notifyBridge(task, isSessionTask, `✅ ${task.name}`, partialResult);
 
     // Insert result as assistant message in the task's session (or latest assistant session)
     try {
@@ -220,7 +249,7 @@ async function executeDueTask(task: ScheduledTask, isSessionTask = false): Promi
             }
           }
         } catch {}
-        addMessage(targetSessionId, 'assistant', `${buddyPrefix} **${task.name}**\n\n${result}`);
+        addMessage(targetSessionId, 'assistant', `${buddyPrefix} **${task.name}**\n\n${partialResult}`);
       }
     } catch { /* best effort */ }
 
@@ -246,9 +275,13 @@ async function executeDueTask(task: ScheduledTask, isSessionTask = false): Promi
       consecutive_errors: errors,
     });
 
-    // Log failed execution
+    // Update the running log entry (or insert new one if logId is unavailable)
     try {
-      insertTaskRunLog({ task_id: task.id, status: 'error', error: errorMsg, duration_ms: Date.now() - startTime });
+      if (logId) {
+        updateTaskRunLog(logId, { status: 'error', error: errorMsg, duration_ms: Date.now() - startTime });
+      } else {
+        insertTaskRunLog({ task_id: task.id, status: 'error', error: errorMsg, duration_ms: Date.now() - startTime });
+      }
     } catch { /* best effort logging */ }
 
     // Exponential backoff
