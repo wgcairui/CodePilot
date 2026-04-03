@@ -31,6 +31,7 @@ export {
   Copy,
   Desktop,
   DotsThree,
+  DotsSixVertical,
   DotOutline,
   DownloadSimple,
   Eye,

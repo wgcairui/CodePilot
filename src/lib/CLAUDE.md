@@ -31,7 +31,10 @@
 ## sdkProxyOnly Providers（MiniMax / Kimi / GLM 等）
 
 ⚠️ `provider-resolver.ts` `buildResolution()` 中对这类 provider 有以下特殊处理：
-- `settingSources: ['project', 'local']`（排除 `'user'`）— 防止 `~/.claude/settings.json` 的 env 覆盖凭据
+- `settingSources` 为 `['project', 'local']`（**不含 `'user'`**）— 防止 `~/.claude/settings.json` 的 `env` 节覆盖 provider 凭据
+  - SDK 加载 settings.json 的 `env` 节会**叠加覆盖** process.env（不是反过来），因此 process.env 保护无效
+  - ⚠️ 不能将 `'user'` 加入 sdkProxyOnly providers 的 settingSources，否则用户的 `ANTHROPIC_API_KEY`/`ANTHROPIC_BASE_URL` 会覆盖 MiniMax/Kimi 凭据，导致 "Invalid API Key" 错误
+  - 副作用：`~/.claude/` 下的 skills/hooks 对这类 provider 不可用（结构性限制，SDK API 无法区分 env 和 plugins）
 - catalog `defaultEnvOverrides` 在运行时合并为 base（DB 值优先）— 确保 `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` 等始终生效（不依赖 DB 是否保存）
 - `claude-client.ts` 中跳过 `thinking` 参数和默认 `effort: 'medium'` — 这类 provider 的代理协议不支持
 

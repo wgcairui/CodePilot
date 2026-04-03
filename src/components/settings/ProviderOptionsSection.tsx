@@ -17,13 +17,15 @@ interface ProviderOptionsSectionProps {
   providerId: string;
   /** Show thinking mode + 1M context options (only for Anthropic-compatible providers) */
   showThinkingOptions?: boolean;
+  /** Left indent in px, default 34 */
+  indent?: number;
 }
 
 /**
  * Per-provider options: thinking mode + 1M context toggle.
  * Only rendered when `showThinkingOptions` is true.
  */
-export function ProviderOptionsSection({ providerId, showThinkingOptions = false }: ProviderOptionsSectionProps) {
+export function ProviderOptionsSection({ providerId, showThinkingOptions = false, indent = 34 }: ProviderOptionsSectionProps) {
   const { t } = useTranslation();
   const [options, setOptions] = useState<ProviderOptions>({
     thinking_mode: 'adaptive',
@@ -58,7 +60,7 @@ export function ProviderOptionsSection({ providerId, showThinkingOptions = false
   if (!loaded || !showThinkingOptions) return null;
 
   return (
-    <div className="ml-[34px] mt-2 space-y-2.5">
+    <div className="mt-2 space-y-2.5" style={{ marginLeft: indent }}>
       {/* Thinking mode */}
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">

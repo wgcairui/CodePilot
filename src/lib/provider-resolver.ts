@@ -608,7 +608,8 @@ function buildResolution(
   // Exception: sdkProxyOnly providers (MiniMax, Kimi, GLM, etc.) must exclude
   // 'user' to prevent ~/.claude/settings.json env vars from shadowing their
   // credentials (e.g. ANTHROPIC_API_KEY/BASE_URL injected by Anthropic setup).
-  // This mirrors what generateTextViaSdk already does for all providers.
+  // The SDK applies settings.json env on top of process.env, so process.env
+  // does NOT win — exclusion is the only reliable protection.
   const sdkProxyOnly = catalogPreset?.sdkProxyOnly ?? false;
   const settingSources = sdkProxyOnly
     ? ['project', 'local']

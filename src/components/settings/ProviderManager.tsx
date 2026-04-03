@@ -13,7 +13,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { SpinnerGap, PencilSimple, Stethoscope } from "@/components/ui/icon";
+import { SpinnerGap, PencilSimple, Stethoscope, DotsSixVertical } from "@/components/ui/icon";
+import { Input } from "@/components/ui/input";
 import { ProviderForm } from "./ProviderForm";
 import { ProviderDoctorDialog } from "./ProviderDoctorDialog";
 import type { ProviderFormData } from "./ProviderForm";
@@ -73,6 +74,11 @@ export function ProviderManager() {
   // Doctor dialog state
   const [doctorOpen, setDoctorOpen] = useState(false);
 
+  // Env provider override state (manual base_url / auth_token)
+  const [envOverrideBaseUrl, setEnvOverrideBaseUrl] = useState('');
+  const [envOverrideToken, setEnvOverrideToken] = useState('');
+  const [envOverrideSaving, setEnvOverrideSaving] = useState(false);
+
   // MiniMax quota state: { [providerId]: { loading, models, error } }
   const [minimaxQuotas, setMinimaxQuotas] = useState<Record<string, {
     loading: boolean;
@@ -107,6 +113,38 @@ export function ProviderManager() {
   }, []);
 
   useEffect(() => { fetchProviders(); }, [fetchProviders]);
+
+  // Load env provider overrides on mount
+  useEffect(() => {
+    fetch('/api/settings/app')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.settings) {
+          setEnvOverrideBaseUrl(data.settings.anthropic_base_url || '');
+          setEnvOverrideToken(data.settings.anthropic_auth_token || '');
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleEnvOverrideSave = useCallback(async () => {
+    setEnvOverrideSaving(true);
+    try {
+      await fetch('/api/settings/app', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          settings: {
+            anthropic_base_url: envOverrideBaseUrl,
+            anthropic_auth_token: envOverrideToken.startsWith('***') ? undefined : envOverrideToken,
+          },
+        }),
+      });
+      window.dispatchEvent(new Event('provider-changed'));
+    } catch { /* ignore */ } finally {
+      setEnvOverrideSaving(false);
+    }
+  }, [envOverrideBaseUrl, envOverrideToken]);
 
   // Fetch all provider models for the global default model selector
   const fetchModels = useCallback(() => {
@@ -402,6 +440,48 @@ export function ProviderManager() {
 
   const sorted = [...providers].sort((a, b) => a.sort_order - b.sort_order);
 
+  // ── Drag-to-reorder state ──
+  const [dragIndex, setDragIndex] = useState<number | null>(null);
+  const [overIndex, setOverIndex] = useState<number | null>(null);
+
+  const handleDragStart = (index: number) => setDragIndex(index);
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    setOverIndex(index);
+  };
+  const handleDragEnd = () => {
+    setDragIndex(null);
+    setOverIndex(null);
+  };
+  const handleDrop = async (dropIndex: number) => {
+    if (dragIndex === null || dragIndex === dropIndex) {
+      setDragIndex(null);
+      setOverIndex(null);
+      return;
+    }
+    const reordered = [...sorted];
+    const [moved] = reordered.splice(dragIndex, 1);
+    reordered.splice(dropIndex, 0, moved);
+    const orders = reordered.map((p, i) => ({ id: p.id, sort_order: i }));
+    // Optimistic update
+    setProviders(prev => {
+      const updated = [...prev];
+      orders.forEach(({ id, sort_order }) => {
+        const idx = updated.findIndex(p => p.id === id);
+        if (idx !== -1) updated[idx] = { ...updated[idx], sort_order };
+      });
+      return updated;
+    });
+    setDragIndex(null);
+    setOverIndex(null);
+    await fetch('/api/providers', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ orders }),
+    }).catch(() => {});
+    window.dispatchEvent(new Event('provider-changed'));
+  };
+
   // Save global default model — also syncs default_provider_id for backend consumers
   const handleGlobalDefaultModelChange = useCallback(async (compositeValue: string) => {
     if (compositeValue === '__auto__') {
@@ -545,16 +625,64 @@ export function ProviderManager() {
               {t('provider.ccSwitchHint')}
             </p>
             <ProviderOptionsSection providerId="env" showThinkingOptions />
+            {/* Manual overrides for env provider — persisted in CodePilot DB, override env vars */}
+            <div className="ml-[34px] mt-3 space-y-2">
+              <p className="text-[11px] text-muted-foreground font-medium">
+                {isZh ? '手动覆盖（优先于环境变量）' : 'Manual overrides (take precedence over env vars)'}
+              </p>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-muted-foreground w-20 shrink-0">Base URL</span>
+                <Input
+                  value={envOverrideBaseUrl}
+                  onChange={e => setEnvOverrideBaseUrl(e.target.value)}
+                  placeholder="https://api.anthropic.com"
+                  className="h-7 text-[11px] font-mono"
+                />
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] text-muted-foreground w-20 shrink-0">Auth Token</span>
+                <Input
+                  value={envOverrideToken}
+                  onChange={e => setEnvOverrideToken(e.target.value)}
+                  placeholder={isZh ? '留空则使用环境变量' : 'Leave empty to use env var'}
+                  type="password"
+                  className="h-7 text-[11px] font-mono"
+                />
+              </div>
+              <div className="flex justify-end">
+                <Button
+                  size="xs"
+                  variant="outline"
+                  onClick={handleEnvOverrideSave}
+                  disabled={envOverrideSaving}
+                >
+                  {envOverrideSaving ? (isZh ? '保存中…' : 'Saving…') : (isZh ? '保存' : 'Save')}
+                </Button>
+              </div>
+            </div>
           </div>
 
           {/* Connected provider list */}
           {sorted.length > 0 ? (
-            sorted.map((provider) => (
+            sorted.map((provider, index) => (
               <div
                 key={provider.id}
-                className="py-2.5 px-1 border-b border-border/30 last:border-b-0"
+                draggable
+                onDragStart={() => handleDragStart(index)}
+                onDragOver={(e) => handleDragOver(e, index)}
+                onDrop={() => handleDrop(index)}
+                onDragEnd={handleDragEnd}
+                className={`py-2.5 px-1 border-b border-border/30 last:border-b-0 transition-opacity ${
+                  dragIndex === index ? 'opacity-40' : ''
+                } ${overIndex === index && dragIndex !== index ? 'border-t-2 border-t-primary' : ''}`}
               >
                 <div className="flex items-center gap-3">
+                  <div
+                    className="shrink-0 cursor-grab active:cursor-grabbing text-muted-foreground/40 hover:text-muted-foreground"
+                    title={isZh ? '拖拽排序' : 'Drag to reorder'}
+                  >
+                    <DotsSixVertical size={14} />
+                  </div>
                   <div className="shrink-0 w-[22px] flex justify-center">
                     {getProviderIcon(provider.name, provider.base_url)}
                   </div>
@@ -592,11 +720,12 @@ export function ProviderManager() {
                   <ProviderOptionsSection
                     providerId={provider.id}
                     showThinkingOptions
+                    indent={60}
                   />
                 )}
                 {/* Gemini Image model selector — capsule buttons */}
                 {provider.provider_type === 'gemini-image' && (
-                  <div className="ml-[34px] mt-2 flex items-center gap-1.5">
+                  <div className="ml-[60px] mt-2 flex items-center gap-1.5">
                     <span className="text-[11px] text-muted-foreground mr-1">{isZh ? '模型' : 'Model'}:</span>
                     {GEMINI_IMAGE_MODELS.map((m) => {
                       const isActive = getGeminiImageModel(provider) === m.value;
@@ -621,13 +750,13 @@ export function ProviderManager() {
                 {/* MiniMax Chat provider quota (shows all models) */}
                 {provider.provider_type !== 'minimax-media' &&
                   (provider.base_url?.includes('minimaxi.com') || provider.base_url?.includes('minimax.io')) && (
-                  <div className="ml-[34px] mt-1.5">
+                  <div className="ml-[60px] mt-1.5">
                     {renderMinimaxQuota(provider.id)}
                   </div>
                 )}
                 {/* MiniMax Media model selectors + quota */}
                 {provider.provider_type === 'minimax-media' && (
-                  <div className="ml-[34px] mt-2 space-y-1.5">
+                  <div className="ml-[60px] mt-2 space-y-1.5">
                     {/* Image model */}
                     <div className="flex items-center gap-1.5">
                       <span className="text-[11px] text-muted-foreground w-16">{isZh ? '图片模型' : 'Image'}:</span>

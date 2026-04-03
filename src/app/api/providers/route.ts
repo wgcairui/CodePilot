@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAllProviders, createProvider, getSetting } from '@/lib/db';
+import { getAllProviders, createProvider, updateProvider, getSetting } from '@/lib/db';
 import type { ProviderResponse, ErrorResponse, CreateProviderRequest, ApiProvider } from '@/types';
 
 function maskApiKey(provider: ApiProvider): ApiProvider {
@@ -46,6 +46,25 @@ export async function GET() {
   } catch (error) {
     return NextResponse.json<ErrorResponse>(
       { error: error instanceof Error ? error.message : 'Failed to get providers' },
+      { status: 500 }
+    );
+  }
+}
+
+/** Batch reorder: PATCH /api/providers  body: { orders: [{id, sort_order}] } */
+export async function PATCH(request: NextRequest) {
+  try {
+    const { orders } = await request.json() as { orders: { id: string; sort_order: number }[] };
+    if (!Array.isArray(orders)) {
+      return NextResponse.json<ErrorResponse>({ error: 'orders must be an array' }, { status: 400 });
+    }
+    for (const { id, sort_order } of orders) {
+      updateProvider(id, { sort_order });
+    }
+    return NextResponse.json({ ok: true });
+  } catch (error) {
+    return NextResponse.json<ErrorResponse>(
+      { error: error instanceof Error ? error.message : 'Failed to reorder providers' },
       { status: 500 }
     );
   }
