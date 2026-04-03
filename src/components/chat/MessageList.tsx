@@ -15,7 +15,8 @@ import {
 import { MessageItem } from './MessageItem';
 import { StreamingMessage } from './StreamingMessage';
 import { CodePilotLogo } from './CodePilotLogo';
-import { SPECIES_IMAGE_URL, EGG_IMAGE_URL, RARITY_BG_GRADIENT, type Species, type Rarity } from '@/lib/buddy';
+import { RARITY_BG_GRADIENT, type Species, type Rarity } from '@/lib/buddy';
+import { BuddyAvatar } from '@/components/ui/buddy-avatar';
 
 /**
  * Scrolls to bottom when streaming starts or new messages are appended.
@@ -234,13 +235,10 @@ export function MessageList({
                 className="w-20 h-20 rounded-2xl flex items-center justify-center"
                 style={{ background: RARITY_BG_GRADIENT[buddyInfo!.rarity as Rarity] || '' }}
               >
-                <img
-                  src={SPECIES_IMAGE_URL[buddyInfo!.species as Species] || ''}
-                  alt="" width={64} height={64} className="drop-shadow-md"
-                />
+                <BuddyAvatar species={buddyInfo!.species as Species} size={64} className="drop-shadow-md" />
               </div>
             ) : (
-              <img src={EGG_IMAGE_URL} alt="" width={64} height={64} className="drop-shadow-md" />
+              <BuddyAvatar size={64} className="drop-shadow-md" />
             )}
             <div className="space-y-1">
               <h3 className="font-medium text-sm">

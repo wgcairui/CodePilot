@@ -98,6 +98,14 @@ npx tsx --test src/__tests__/unit/foo.test.ts
 **`/api/providers` 返回的 api_key 是 masked（`***...`）：**
 - 前端无法直接读取原始 key；需调用专用端点或后端复制逻辑
 
+**Buddy 图片 CDN（国内访问）：**
+- `cdn.jsdelivr.net` 在国内不可用，buddy 图片通过 `.env.local` 的 `NEXT_PUBLIC_XGET_BASE_URL` 代理到 Xget（当前值 `https://xget.xi.cx`）
+- `src/components/ui/buddy-avatar.tsx` — 统一渲染 buddy/egg 图片，内置 `onError` emoji fallback；所有地方应使用此组件而非裸 `<img src={SPECIES_IMAGE_URL[...]}>`
+
+**Turbopack 热更新残留（⚠️ 常见误判）：**
+- 修改 import 后 Fast Refresh 报 `ReferenceError: xxx is not defined`，通常是旧 chunk 残留，不是代码 bug
+- 修复：强制刷新（Chrome: Ctrl+Shift+R；CDP: `navigate_page reload ignoreCache:true`）
+
 **Remote Host SSH 隧道：** 见 [`src/lib/remote/`](./src/lib/remote/)
 - ⚠️ `remoteHost.*` i18n 前缀（不是 `remote.*`）— Bridge 功能已占用 `remote.title`
 - ⚠️ `deployAgent` 的远程路径用 SSH exec `echo $HOME` 获取，不能用本地 `process.env.HOME`

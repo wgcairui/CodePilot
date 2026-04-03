@@ -12,7 +12,8 @@ import { WidgetRenderer } from "@/components/chat/WidgetRenderer";
 import type { DashboardConfig, DashboardWidget } from "@/types/dashboard";
 import type { TranslationKey } from "@/i18n";
 import { cn } from "@/lib/utils";
-import { RARITY_DISPLAY, STAT_LABEL, SPECIES_LABEL, rarityColor, getBuddyTitle, SPECIES_IMAGE_URL, EGG_IMAGE_URL, RARITY_BG_GRADIENT, type BuddyData, type Species, type Rarity } from "@/lib/buddy";
+import { RARITY_DISPLAY, STAT_LABEL, SPECIES_LABEL, rarityColor, getBuddyTitle, RARITY_BG_GRADIENT, type BuddyData, type Species, type Rarity } from "@/lib/buddy";
+import { BuddyAvatar } from "@/components/ui/buddy-avatar";
 
 function formatWidgetTime(iso: string): string {
   const d = new Date(iso);
@@ -343,16 +344,11 @@ export function DashboardPanel() {
         <div className="flex h-10 shrink-0 items-center justify-between px-3">
           <div className="flex items-center gap-2">
             {isAssistantWorkspace ? (
-              assistantSummary?.buddy ? (
-                <img
-                  src={SPECIES_IMAGE_URL[assistantSummary.buddy.species as Species] || ''}
-                  alt={assistantSummary.buddy.species}
-                  width={24} height={24}
-                  className="rounded"
-                />
-              ) : (
-                <img src={EGG_IMAGE_URL} alt="egg" width={24} height={24} />
-              )
+              <BuddyAvatar
+                species={assistantSummary?.buddy?.species as Species | undefined}
+                size={24}
+                className="rounded"
+              />
             ) : null}
             <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
               {isAssistantWorkspace
@@ -651,17 +647,12 @@ function AssistantStatusCard({ summary, t }: {
     <div className={cn('rounded-lg border bg-primary/[0.03] p-3 space-y-3', cardBorder)}>
       {/* Header: 3D image + Name + Species + Rarity + Settings gear */}
       <div className="flex items-center gap-2">
-        {buddy ? (
-          <img
-            src={SPECIES_IMAGE_URL[buddy.species as Species] || ''}
-            alt={buddy.species}
-            width={40} height={40}
-            className="rounded-lg"
-            style={{ background: RARITY_BG_GRADIENT[buddy.rarity as Rarity] || '' }}
-          />
-        ) : (
-          <img src={EGG_IMAGE_URL} alt="egg" width={40} height={40} />
-        )}
+        <BuddyAvatar
+          species={buddy?.species as Species | undefined}
+          size={40}
+          className="rounded-lg"
+          style={{ background: buddy ? (RARITY_BG_GRADIENT[buddy.rarity as Rarity] || '') : '' }}
+        />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2">
             <span className="text-sm font-medium truncate">

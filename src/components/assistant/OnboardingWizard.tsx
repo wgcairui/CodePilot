@@ -8,7 +8,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { AssistantAvatar } from '@/components/ui/AssistantAvatar';
 import { useTranslation } from '@/hooks/useTranslation';
 import type { TranslationKey } from '@/i18n';
-import { SPECIES_LABEL, SPECIES_IMAGE_URL, RARITY_DISPLAY, RARITY_BG_GRADIENT, STAT_LABEL, rarityColor, type BuddyData, type Species, type Rarity } from '@/lib/buddy';
+import { SPECIES_LABEL, RARITY_DISPLAY, RARITY_BG_GRADIENT, STAT_LABEL, rarityColor, type BuddyData, type Species, type Rarity } from '@/lib/buddy';
+import { BuddyAvatar } from '@/components/ui/buddy-avatar';
 
 // ── Types ──
 
@@ -292,12 +293,7 @@ export function OnboardingWizard({ workspacePath, onComplete }: OnboardingWizard
                   className="w-20 h-20 rounded-2xl flex items-center justify-center"
                   style={{ background: RARITY_BG_GRADIENT[buddy.rarity as Rarity] || '' }}
                 >
-                  <img
-                    src={SPECIES_IMAGE_URL[buddy.species as Species] || ''}
-                    alt={buddy.species}
-                    width={64} height={64}
-                    className="drop-shadow-md"
-                  />
+                  <BuddyAvatar species={buddy.species as Species} size={64} className="drop-shadow-md" />
                 </div>
               </div>
               <div>

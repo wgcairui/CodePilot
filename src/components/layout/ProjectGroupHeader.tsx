@@ -23,7 +23,8 @@ import { cn } from "@/lib/utils";
 import { useTranslation } from '@/hooks/useTranslation';
 import type { TranslationKey } from "@/i18n";
 import { useState } from "react";
-import { SPECIES_IMAGE_URL, EGG_IMAGE_URL, type Species } from "@/lib/buddy";
+import { type Species } from "@/lib/buddy";
+import { BuddyAvatar } from "@/components/ui/buddy-avatar";
 
 interface ProjectGroupHeaderProps {
   workingDirectory: string;
@@ -161,15 +162,7 @@ export function ProjectGroupHeader({
         onMouseEnter={onMouseEnter}
         onMouseLeave={onMouseLeave}
       >
-        {buddySpecies ? (
-          <img
-            src={SPECIES_IMAGE_URL[buddySpecies as Species] || ''}
-            alt="" width={24} height={24}
-            className="shrink-0 rounded"
-          />
-        ) : (
-          <img src={EGG_IMAGE_URL} alt="egg" width={24} height={24} className="shrink-0" />
-        )}
+        <BuddyAvatar species={buddySpecies as Species | undefined} size={24} className="shrink-0 rounded" />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-1">
             <span className="truncate text-[13px] font-medium text-sidebar-foreground">

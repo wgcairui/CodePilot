@@ -17,7 +17,8 @@ import { ImageGenCard } from './ImageGenCard';
 import { BatchPlanInlinePreview } from './batch-image-gen/BatchPlanInlinePreview';
 import { WidgetRenderer } from './WidgetRenderer';
 import { buildReferenceImages } from '@/lib/image-ref-store';
-import { SPECIES_IMAGE_URL, EGG_IMAGE_URL, RARITY_BG_GRADIENT, type Species, type Rarity } from '@/lib/buddy';
+import { RARITY_BG_GRADIENT, type Species, type Rarity } from '@/lib/buddy';
+import { BuddyAvatar } from '@/components/ui/buddy-avatar';
 import { parseDBDate } from '@/lib/utils';
 import { usePanel } from '@/hooks/usePanel';
 import type { PlannerOutput } from '@/types';
@@ -629,14 +630,12 @@ export const MessageItem = memo(function MessageItem({ message, sessionId, isAss
   return (
     <div className={showAssistantAvatar ? 'flex gap-2.5 items-start' : ''}>
       {showAssistantAvatar && (
-        buddyInfo?.species
-          ? <img
-              src={SPECIES_IMAGE_URL[buddyInfo.species as Species] || ''}
-              alt="" width={28} height={28}
-              className="mt-0.5 shrink-0 rounded-lg"
-              style={{ background: RARITY_BG_GRADIENT[buddyInfo.rarity as Rarity] || '' }}
-            />
-          : <img src={EGG_IMAGE_URL} alt="egg" width={28} height={28} className="mt-0.5 shrink-0" />
+        <BuddyAvatar
+            species={buddyInfo?.species as Species | null | undefined}
+            size={28}
+            className="mt-0.5 shrink-0 rounded-lg"
+            style={{ background: buddyInfo?.rarity ? (RARITY_BG_GRADIENT[buddyInfo.rarity as Rarity] ?? '') : '' }}
+          />
       )}
       <div className="flex-1 min-w-0">
     <AIMessage from={isUser ? 'user' : 'assistant'}>

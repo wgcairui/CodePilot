@@ -24,7 +24,8 @@ import { useClientPlatform } from '@/hooks/useClientPlatform';
 import { showToast } from '@/hooks/useToast';
 import { ResourceMonitor } from './ResourceMonitor';
 import { RemoteConnectionStatus } from '@/components/remote/ConnectionStatus';
-import { SPECIES_IMAGE_URL, EGG_IMAGE_URL, type Species } from '@/lib/buddy';
+import { type Species } from '@/lib/buddy';
+import { BuddyAvatar } from '@/components/ui/buddy-avatar';
 
 export function UnifiedTopBar() {
   const {
@@ -276,10 +277,7 @@ export function UnifiedTopBar() {
                     onClick={() => setDashboardPanelOpen(!dashboardPanelOpen)}
                   >
                     {isAssistantWorkspace
-                      ? <img
-                          src={buddySpecies ? (SPECIES_IMAGE_URL[buddySpecies as Species] || '') : EGG_IMAGE_URL}
-                          alt="" width={16} height={16} className="rounded-sm"
-                        />
+                      ? <BuddyAvatar species={buddySpecies as Species | undefined} size={16} className="rounded-sm" />
                       : <ChartBar size={16} />}
                     <span className="sr-only">{t('topBar.dashboard')}</span>
                   </Button>
