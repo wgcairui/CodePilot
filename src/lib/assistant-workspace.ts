@@ -35,10 +35,6 @@ const PER_FILE_LIMIT = 8000;
 const HEAD_SIZE = 6000;
 const TAIL_SIZE = 1800;
 const TOTAL_PROMPT_LIMIT = 40000;
-const DAILY_MEMORY_LIMIT = 4000;
-const ROOT_DOC_LIMIT = 2000;
-const RETRIEVAL_RESULT_LIMIT = 3000;
-const MAX_RETRIEVAL_RESULTS = 5;
 
 function resolveFile(dir: string, key: keyof AssistantWorkspaceFiles): { filePath: string; exists: boolean } {
   for (const variant of FILE_MAP[key]) {
@@ -435,30 +431,8 @@ export function loadWorkspaceFiles(dir: string): AssistantWorkspaceFilesV2 {
     }
   }
 
-  // Load daily memories (today + yesterday)
-  const dailyMemories = loadDailyMemories(dir, 2);
-  if (dailyMemories.length > 0) {
-    result.dailyMemories = dailyMemories.map(m =>
-      truncateContent(`## ${m.date}\n${m.content}`, DAILY_MEMORY_LIMIT)
-    );
-  }
-
-  // Load root docs
-  const readmePath = path.join(dir, 'README.ai.md');
-  if (fs.existsSync(readmePath)) {
-    result.rootReadme = truncateContent(
-      fs.readFileSync(readmePath, 'utf-8'),
-      ROOT_DOC_LIMIT
-    );
-  }
-
-  const pathFilePath = path.join(dir, 'PATH.ai.md');
-  if (fs.existsSync(pathFilePath)) {
-    result.rootPath = truncateContent(
-      fs.readFileSync(pathFilePath, 'utf-8'),
-      ROOT_DOC_LIMIT
-    );
-  }
+  // Daily memories and root docs are now accessed via MCP tools
+  // (codepilot_memory_search / codepilot_memory_get), not loaded into system prompt.
 
   // Load HEARTBEAT.md
   const heartbeatPath = path.join(dir, 'HEARTBEAT.md');

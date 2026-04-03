@@ -39,8 +39,6 @@ export interface AssembledContext {
   systemPrompt: string | undefined;
   /** Whether generative UI is enabled (affects widget MCP server + streamClaude param) */
   generativeUIEnabled: boolean;
-  /** Whether widget MCP server should be registered (keyword-gated) */
-  needsWidgetMcp: boolean;
   /** Onboarding/checkin instructions (route.ts uses this for server-side completion detection) */
   assistantProjectInstructions: string;
   /** Whether this session is in the assistant workspace */
@@ -54,6 +52,7 @@ export async function assembleContext(config: ContextAssemblyConfig): Promise<As
   const t0 = Date.now();
 
   let workspacePrompt = '';
+  let memoryHint = '';
   let assistantProjectInstructions = '';
   let isAssistantProject = false;
 
@@ -90,13 +89,14 @@ export async function assembleContext(config: ContextAssemblyConfig): Promise<As
         // what's available without loading full content.
         workspacePrompt = assembleWorkspacePrompt(files);
 
-        // Memory availability hint: tell AI what daily memories exist
+        // Memory availability hint — stored separately as volatile content
+        // (changes daily, should not invalidate the static identity prefix cache)
         try {
           const { loadDailyMemories } = await import('@/lib/assistant-workspace');
           const recentDays = loadDailyMemories(workspacePath, 5);
           if (recentDays.length > 0) {
             const dateList = recentDays.map(d => d.date).join(', ');
-            workspacePrompt += `\n\n<memory-hint>Recent daily memories available: ${dateList}. Use codepilot_memory_recent to review them.</memory-hint>`;
+            memoryHint = `<memory-hint>Recent daily memories available: ${dateList}. Use codepilot_memory_recent to review them.</memory-hint>`;
           }
         } catch {
           // skip if daily memories unavailable
@@ -159,49 +159,65 @@ export async function assembleContext(config: ContextAssemblyConfig): Promise<As
     console.warn('[context-assembler] Failed to load assistant workspace:', e);
   }
 
-  // ── Layer 2: Session prompt + per-request append ──────────────────
-  let finalSystemPrompt: string | undefined = session.system_prompt || undefined;
-  if (systemPromptAppend) {
-    finalSystemPrompt = (finalSystemPrompt || '') + '\n\n' + systemPromptAppend;
-  }
+  // ── Prompt assembly: STATIC PREFIX → VOLATILE SUFFIX ──────────────
+  //
+  // Order matters for prompt cache: the API caches from the start of the
+  // prompt. Stable content goes first so the prefix stays unchanged across
+  // turns, maximizing cache hits. Volatile content (changes per turn or
+  // per request) goes at the end.
+  //
+  // STATIC PREFIX (rarely changes within a session):
+  //   1. WIDGET_SYSTEM_PROMPT — compile-time constant
+  //   2. session.system_prompt — set at session creation
+  //   3. Workspace identity (soul/user/claude.md) — changes only when files edited
+  //
+  // VOLATILE SUFFIX (can change every turn):
+  //   4. Memory hint — changes daily
+  //   5. Assistant instructions — depends on onboarding/heartbeat state
+  //   6. Dashboard summary — changes with widget operations
+  //   7. systemPromptAppend — per-request (image agent mode, skills, etc.)
 
-  // Workspace prompt goes first (base personality), session prompt after (task override)
-  if (workspacePrompt) {
-    finalSystemPrompt = workspacePrompt + '\n\n' + (finalSystemPrompt || '');
-  }
+  const staticParts: string[] = [];
+  const volatileParts: string[] = [];
 
-  // ── Layer 3: Assistant project instructions ───────────────────────
-  if (assistantProjectInstructions) {
-    finalSystemPrompt = (finalSystemPrompt || '') + '\n\n' + assistantProjectInstructions;
-  }
-
-  // Layer 4 removed — CLI tools capability prompt is now injected in
-  // claude-client.ts only when the MCP server is also mounted (keyword-gated).
-
-  // ── Layer 5: Widget system prompt (desktop only) ──────────────────
+  // [STATIC 1] Widget system prompt (desktop only) — compile-time constant
   const generativeUISetting = getSetting('generative_ui_enabled');
   const generativeUIEnabled = entryPoint === 'desktop' && generativeUISetting !== 'false';
 
   if (generativeUIEnabled) {
     try {
       const { WIDGET_SYSTEM_PROMPT } = await import('@/lib/widget-guidelines');
-      finalSystemPrompt = (finalSystemPrompt || '') + '\n\n' + WIDGET_SYSTEM_PROMPT;
+      staticParts.push(WIDGET_SYSTEM_PROMPT);
     } catch {
       // Widget prompt injection failed — don't block
     }
   }
 
-  // ── Widget MCP keyword detection (desktop only) ───────────────────
-  let needsWidgetMcp = false;
-  if (generativeUIEnabled) {
-    const widgetKeywords = /可视化|图表|流程图|时间线|架构图|对比|visualiz|diagram|chart|flowchart|timeline|infographic|interactive|widget|show-widget|hierarchy|dashboard/i;
-    if (widgetKeywords.test(userPrompt)) needsWidgetMcp = true;
-    else if (conversationHistory?.some(m => m.content.includes('show-widget'))) needsWidgetMcp = true;
-    else if (imageAgentMode) needsWidgetMcp = true;
+  // [STATIC 2] Session system prompt — set once at session creation
+  if (session.system_prompt) {
+    staticParts.push(session.system_prompt);
   }
 
-  // ── Layer 6: Dashboard context (desktop only) ─────────────────────
-  // Inject compact summary of pinned widgets so the AI knows what's on the dashboard.
+  // [STATIC 3] Workspace identity files (soul/user/claude.md)
+  // Note: workspacePrompt was computed earlier WITHOUT memory hint (identity only)
+  if (workspacePrompt) {
+    staticParts.push(workspacePrompt);
+  }
+
+  // [VOLATILE 4] Memory hint — changes daily
+  if (memoryHint) {
+    volatileParts.push(memoryHint);
+  }
+
+  // [VOLATILE 5] Assistant project instructions — state-dependent
+  if (assistantProjectInstructions) {
+    volatileParts.push(assistantProjectInstructions);
+  }
+
+  // Widget MCP keyword detection is handled solely in claude-client.ts
+  // where the actual MCP server registration happens.
+
+  // [VOLATILE 6] Dashboard context (desktop only)
   if (entryPoint === 'desktop' && session.working_directory) {
     try {
       const { readDashboard } = await import('@/lib/dashboard-store');
@@ -209,19 +225,27 @@ export async function assembleContext(config: ContextAssemblyConfig): Promise<As
       if (config.widgets.length > 0) {
         const summary = config.widgets.map((w, i) => `${i + 1}. ${w.title} — ${w.dataContract}`).join('\n');
         const trimmed = summary.length > 500 ? summary.slice(0, 500) + '...' : summary;
-        finalSystemPrompt = (finalSystemPrompt || '') + `\n\n<active-dashboard>\nThe user has ${config.widgets.length} widget(s) pinned to their project dashboard:\n${trimmed}\n</active-dashboard>`;
+        volatileParts.push(`<active-dashboard>\nThe user has ${config.widgets.length} widget(s) pinned to their project dashboard:\n${trimmed}\n</active-dashboard>`);
       }
     } catch {
       // Dashboard read failed — don't block
     }
   }
 
+  // [VOLATILE 7] Per-request append (image agent mode, skills, etc.)
+  if (systemPromptAppend) {
+    volatileParts.push(systemPromptAppend);
+  }
+
+  // Concatenate: static prefix + volatile suffix
+  const allParts = [...staticParts, ...volatileParts].filter(Boolean);
+  const finalSystemPrompt = allParts.length > 0 ? allParts.join('\n\n') : undefined;
+
   console.log(`[context-assembler] total: ${Date.now() - t0}ms (entry=${entryPoint}, prompt=${finalSystemPrompt?.length ?? 0} chars)`);
 
   return {
     systemPrompt: finalSystemPrompt,
     generativeUIEnabled,
-    needsWidgetMcp,
     assistantProjectInstructions,
     isAssistantProject,
   };

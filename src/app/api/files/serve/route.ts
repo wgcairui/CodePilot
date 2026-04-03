@@ -1,5 +1,6 @@
 import { NextRequest } from 'next/server';
 import fs from 'fs/promises';
+import { createReadStream } from 'fs';
 import path from 'path';
 import { getSession } from '@/lib/db';
 
@@ -77,9 +78,39 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  const buffer = await fs.readFile(resolved);
+  const stat = await fs.stat(resolved);
   const ext = path.extname(resolved).toLowerCase();
   const contentType = MIME_TYPES[ext] || 'application/octet-stream';
+
+  // For large files, stream the response instead of buffering into memory.
+  // Small files (≤10 MB) are still read in full for simplicity.
+  const MAX_BUFFERED_SIZE = 10 * 1024 * 1024;
+
+  if (stat.size > MAX_BUFFERED_SIZE) {
+    const nodeStream = createReadStream(resolved);
+    const webStream = new ReadableStream({
+      start(controller) {
+        nodeStream.on('data', (chunk: Buffer | string) => {
+          controller.enqueue(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+        });
+        nodeStream.on('end', () => controller.close());
+        nodeStream.on('error', (err) => controller.error(err));
+      },
+      cancel() {
+        nodeStream.destroy();
+      },
+    });
+
+    return new Response(webStream, {
+      headers: {
+        'Content-Type': contentType,
+        'Content-Length': String(stat.size),
+        'Cache-Control': 'private, max-age=60',
+      },
+    });
+  }
+
+  const buffer = await fs.readFile(resolved);
 
   return new Response(buffer, {
     headers: {

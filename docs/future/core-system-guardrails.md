@@ -129,37 +129,46 @@
 
 ## 二、Context.md
 
-### 2.1 层级架构
+> 最后更新：2026-04-02（V3.1 上下文管理体系）
+
+### 2.1 层级架构（静态前缀 → 易变后缀）
 
 ```
-System Prompt 组成（按注入顺序）：
+System Prompt 组成（按注入顺序，静态内容在前以优化 prompt cache）：
 
-Layer 1: Workspace Prompt          ← 仅助理模式
-  ├─ claude.md（永不丢弃）
-  ├─ soul.md / user.md
-  ├─ memory.md
-  ├─ 每日记忆（今天+昨天）
-  ├─ 根文档（README.ai.md / PATH.ai.md）
-  └─ 检索结果（最多 5 条）
+[STATIC PREFIX — 跨 turn 稳定，可被 prompt cache 缓存]
+  1. WIDGET_SYSTEM_PROMPT        ← 编译期常量，最稳定
+  2. session.system_prompt       ← 会话级，创建后不变
+  3. Workspace Identity           ← 仅助理模式
+     ├─ claude.md（永不丢弃）
+     ├─ soul.md / user.md
+     └─ （memory/daily/root docs 已改为 MCP 按需检索，不再注入 prompt）
 
-Layer 2: Session System Prompt      ← 所有模式
-  └─ session.system_prompt + systemPromptAppend（技能注入等）
+[VOLATILE SUFFIX — 每 turn 可变]
+  4. Memory Hint                  ← 每天变（最近日记日期列表）
+  5. Assistant Instructions       ← 状态依赖（onboarding/heartbeat/buddy personality）
+  6. Dashboard Context            ← 仅 Desktop，widget 增删时变
+  7. systemPromptAppend           ← 每次请求（image agent mode、skills 等）
 
-Layer 3: Assistant Instructions     ← 仅助理模式，条件触发
-  ├─ 引导问卷（13题，!onboardingComplete 时）
-  └─ 每日问询（3题，needsDailyCheckIn 时）
-
-Layer 4: CLI Tools Prompt           ← 关键词门控
-  └─ CLI_TOOLS_MCP_SYSTEM_PROMPT（~116 行，仅匹配时注入）
-
-Layer 5: Widget System Prompt       ← 仅 Desktop，关键词门控
-  └─ WIDGET_SYSTEM_PROMPT（~150 tokens，轻量常驻）
-
-Layer 6: Dashboard Context          ← 仅 Desktop
-  └─ 已固定的 widget 摘要（≤500 chars）
+CLI Tools Prompt 已从 assembler 移出，在 claude-client.ts 中随 MCP 一起条件注入。
 ```
 
-### 2.2 预算常量（已锁定）
+### 2.2 上下文管理体系
+
+| 能力 | 实现 | 位置 |
+|------|------|------|
+| Token 估算 | `roughTokenEstimate()` — 4B/tok, JSON 2B/tok | `context-estimator.ts` |
+| 自动压缩 | 80% 阈值触发，用 SDK 子进程调 LLM 生成摘要 | `context-compressor.ts` + `route.ts` |
+| 手动压缩 | `/compact` 命令 | `route.ts` /compact handler |
+| PTL 自动重试 | 后端检测 CONTEXT_TOO_LONG → 压缩 → 重试一次 | `claude-client.ts` catch block |
+| Fallback 质量 | token 预算截断 + 工具摘要保留 + session summary 骨架 | `claude-client.ts` buildFallbackContext |
+| Microcompaction | 按消息年龄裁剪：近期 5K chars，30 轮前 1K chars | `message-normalizer.ts` microCompactMessage |
+| 熔断器 | 连续 3 次压缩失败后停止 | `context-compressor.ts` |
+| UI 指标 | ContextUsageIndicator 双指标 + warning/critical 状态 | `ContextUsageIndicator.tsx` |
+| 1M 支持 | `getContextWindow(model, { context1m: true })` → 1M | `model-context.ts` |
+| DB 存储 | `context_summary` + `context_summary_updated_at` 列 | `db.ts` |
+
+### 2.3 预算常量（已锁定）
 
 | 参数 | 值 | 位置 |
 |------|-----|------|
@@ -167,41 +176,36 @@ Layer 6: Dashboard Context          ← 仅 Desktop
 | 单文件上限 | 8,000 chars | 同上 |
 | 截断 head | 6,000 chars | 同上 |
 | 截断 tail | 1,800 chars | 同上 |
-| 每日记忆 | 4,000 chars/条 | 同上 |
-| 根文档 | 2,000 chars/条 | 同上 |
-| 检索结果 | 3,000 chars/条，最多 5 条 | 同上 |
-| 对话历史 fallback | 50 条消息 | `route.ts` / `conversation-engine.ts` |
+| 对话历史 fallback | 200 条消息（按 token 预算截断） | `route.ts` |
+| Fallback token 预算 | 上下文窗口 × 0.7 - system prompt | `route.ts` |
+| 自动压缩阈值 | 上下文窗口 × 0.8 | `context-compressor.ts` |
+| 近期消息裁剪上限 | 5,000 chars | `message-normalizer.ts` |
+| 旧消息裁剪上限 | 1,000 chars（>30 轮前） | 同上 |
 | Dashboard 摘要 | 500 chars | `context-assembler.ts` |
-| CLI help 输出 | 2,000 chars | CLI tools MCP |
+| Summary 最小长度 | 10 chars | `context-compressor.ts` |
 
-### 2.3 入口矩阵
+### 2.4 入口矩阵
 
 | 层 | Desktop | Bridge | 未来: floating | 未来: friend_channel |
 |----|---------|--------|----------------|---------------------|
 | Workspace | ✅（如果是助理项目） | ✅（如果是助理项目） | ✅ | ❌ |
 | Session prompt | ✅ | ✅ | ✅ | ✅（受限） |
 | Assistant instructions | ✅ | ✅ | ❌ | ❌ |
-| CLI tools | ✅（关键词门控） | ✅（关键词门控） | ❌ | ❌ |
-| Widget | ✅（关键词门控） | ❌ | ❌ | ❌ |
-| Dashboard | ✅（关键词门控） | ❌ | ❌ | ❌ |
+| CLI tools | ✅（关键词门控，在 claude-client.ts） | ✅（关键词门控） | ❌ | ❌ |
+| Widget | ✅（关键词门控，在 claude-client.ts） | ❌ | ❌ | ❌ |
+| Dashboard | ✅ | ❌ | ❌ | ❌ |
 
 Bridge 额外约束：`thinking=disabled`，`effort=medium`，`generativeUI=false`。
 
-### 2.4 不可破坏的约束
+### 2.5 不可破坏的约束
 
 1. **claude.md 永不丢弃**——即使 workspace 预算溢出也强制保留
-2. **优先级排序不可改**——claude.md > soul/user > memory > daily > root docs > retrieval
+2. **静态前缀顺序不可改**——WIDGET_SYSTEM_PROMPT → session_prompt → identity files
 3. **Bridge 不注入 widget/dashboard**——IM 渲染不了 iframe
 4. **MCP 关键词门控必须保留**——避免 SDK tool discovery 的 ~1s 开销
-5. **检索仅在 query > 10 chars 时触发**——防止空查询浪费
-6. **system prompt 用 `preset: 'claude_code' + append` 模式**——保留 SDK 自带的 skills/cwd 感知
-
-### 2.5 待确认的原则
-
-- [ ] 总 system prompt 上限——所有层加起来不超过多少？目前没有总量控制
-- [ ] 项目模式的 session.system_prompt 上限——助理可以多用上下文，项目应该精简，但目前无约束
-- [ ] 同时注册 MCP 数量上限——4 套关键词门控各自独立，是否需要限制同时注册数？
-- [ ] 上下文膨胀告警——什么时候提醒用户"你的 system prompt 太长了"？
+5. **system prompt 用 `preset: 'claude_code' + append` 模式**——保留 SDK 自带的 skills/cwd 感知
+6. **压缩用 SDK 子进程**——`generateTextViaSdk()`，不用 `@ai-sdk/anthropic` streamText（第三方代理兼容性）
+7. **Memory 通过 MCP 按需检索**——不在 system prompt 中全量注入
 
 ---
 

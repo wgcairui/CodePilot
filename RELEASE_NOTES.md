@@ -1,28 +1,41 @@
-## CodePilot v0.44.1
+## CodePilot v0.45.0
 
-> v0.44.0 热修复：修复切换会话时模型选择器跳到错误模型的问题，以及若干界面优化。
+> 内存优化专项：全面治理客户端内存占用，涵盖缓存淘汰、流式加载、懒加载、消息窗口化等多项改进。同时包含上下文管理系统和 CLI 升级能力。
 
-### 修复问题
+### 新增功能
 
-- 修复切换会话时，模型选择器短暂显示上一个会话的模型再跳回正确值的问题
-- 修复分栏视图中切换会话同样会出现模型跳动的问题
-- 修复全局默认模型属于其他服务商时，可能被错误应用到当前会话的问题
-- 移除设置页中的"重置伙伴"按钮（测试功能，不应出现在正式版）
+- 新增上下文管理系统：自动测量 token 用量、智能压缩长对话、改进的上下文回退策略
+- 新增 CLI 版本检测和一键升级功能，在设置页直接管理 Claude Code CLI
+- 新增系统代理自动透传，VPN/代理用户无需手动配置即可正常使用
 
 ### 优化改进
 
-- 看板面板默认宽度从 640px 调整为 480px，减少对聊天区域的占用
-- 模型解析逻辑统一为共享函数，主聊天页和分栏视图行为一致
-- 新增 11 个模型解析回归测试，覆盖跨服务商、空配置、已删除服务商等边界场景
+- 代码高亮缓存（Shiki）加入 LRU 淘汰策略，不再随代码块种类无限增长
+- 侧边面板（文件预览、Git、文件树、看板、助理）改为按需加载，未打开时不占用内存
+- Markdown 渲染引擎及插件改为懒加载，仅在实际需要渲染时才加载
+- 终端输出加入 500KB 硬上限，长时间运行的命令不再无限累积内存
+- 聊天消息列表加入 300 条滑动窗口，超出部分自动卸载、上翻时按需重新加载
+- 文件预览改为流式读取，不再将整个大文件加载到内存中
+- 大文件（>10MB）的图片、视频、音频预览改为流式传输
+- 图片上传后立即释放 base64 数据，仅在发送给 AI 时按需从磁盘读取
+- 图片引用缓存加入容量上限（50 条）和自动淘汰
+- 流式会话管理器中的定时器全部纳入统一追踪，会话结束时确保清理
+- 工具输出预览窗口从 5000 字符缩减至 2000 字符
+
+### 修复问题
+
+- 修复多张图片引用时保留策略错误的问题，现在正确保留最新的图片
+- 修复上下文压缩后 token 预算计算不准确的问题
+- 修复压缩器模型回退和服务商解析的问题
 
 ## 下载地址
 
 ### macOS
-- [Apple Silicon (M1/M2/M3/M4)](https://github.com/op7418/CodePilot/releases/download/v0.44.1/CodePilot-0.44.1-arm64.dmg)
-- [Intel](https://github.com/op7418/CodePilot/releases/download/v0.44.1/CodePilot-0.44.1-x64.dmg)
+- [Apple Silicon (M1/M2/M3/M4)](https://github.com/op7418/CodePilot/releases/download/v0.45.0/CodePilot-0.45.0-arm64.dmg)
+- [Intel](https://github.com/op7418/CodePilot/releases/download/v0.45.0/CodePilot-0.45.0-x64.dmg)
 
 ### Windows
-- [Windows 安装包](https://github.com/op7418/CodePilot/releases/download/v0.44.1/CodePilot-Setup-0.44.1.exe)
+- [Windows 安装包](https://github.com/op7418/CodePilot/releases/download/v0.45.0/CodePilot-Setup-0.45.0.exe)
 
 ## 安装说明
 

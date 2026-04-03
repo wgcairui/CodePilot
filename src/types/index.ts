@@ -22,6 +22,8 @@ export interface ChatSession {
   runtime_updated_at: string;
   runtime_error: string;
   permission_profile?: 'default' | 'full_access';
+  context_summary?: string;
+  context_summary_updated_at?: string;
 }
 
 // ==========================================
@@ -49,6 +51,8 @@ export interface FilePreview {
   content: string;
   language: string;
   line_count: number;
+  /** When true, line_count is exact; when false it is a best-effort estimate. */
+  line_count_exact: boolean;
 }
 
 // ==========================================
@@ -628,9 +632,6 @@ export interface AssistantWorkspaceFiles {
 }
 
 export interface AssistantWorkspaceFilesV2 extends AssistantWorkspaceFiles {
-  dailyMemories?: string[];
-  rootReadme?: string;
-  rootPath?: string;
   rootDir?: string;
   heartbeatMd?: string;
 }
@@ -1003,6 +1004,10 @@ export interface ClaudeStreamOptions {
   sessionProviderId?: string;
   /** Recent conversation history from DB — used as fallback context when SDK resume is unavailable or fails */
   conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>;
+  /** Compressed session summary — used as context skeleton in fallback mode */
+  sessionSummary?: string;
+  /** Token budget for fallback history — messages beyond this budget are truncated */
+  fallbackTokenBudget?: number;
   onRuntimeStatusChange?: (status: string) => void;
   /** Per-session bypass: when true, skip all permission checks for this session */
   bypassPermissions?: boolean;

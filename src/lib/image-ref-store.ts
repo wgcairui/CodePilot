@@ -10,7 +10,20 @@ import type { ReferenceImage } from '@/types';
 
 export const PENDING_KEY = '__pending__';
 
+const MAX_STORE_ENTRIES = 50;
 const store = new Map<string, ReferenceImage[]>();
+
+/** Evict oldest entries when store exceeds capacity. */
+function evictIfNeeded(): void {
+  while (store.size > MAX_STORE_ENTRIES) {
+    const oldest = store.keys().next().value;
+    if (oldest !== undefined) {
+      store.delete(oldest);
+    } else {
+      break;
+    }
+  }
+}
 
 // ── sessionStorage persistence for last-generated paths ──
 
@@ -53,6 +66,7 @@ export function setRefImages(key: string, images: ReferenceImage[]): void {
     store.delete(key);
   } else {
     store.set(key, images);
+    evictIfNeeded();
   }
 }
 
@@ -85,6 +99,7 @@ export function transferPendingToMessage(messageId: string): void {
 export function setLastGeneratedImages(sessionId: string, paths: string[]): void {
   const images: ReferenceImage[] = paths.map(p => ({ mimeType: 'image/png', localPath: p }));
   store.set(lastGenKey(sessionId), images);
+  evictIfNeeded();
   if (typeof window !== 'undefined') {
     try {
       sessionStorage.setItem(ssKey(sessionId), JSON.stringify(images));

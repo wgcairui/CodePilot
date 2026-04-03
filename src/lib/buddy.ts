@@ -32,45 +32,27 @@ export const RARITY_AVATAR_COLORS: Record<Rarity, string[]> = {
   legendary: ['#F6AD55', '#FBD38D', '#FEFCBF', '#F6E05E', '#ECC94B'],
 };
 
-/**
- * Convert a cdn.jsdelivr.net/gh/... URL to an Xget-proxied URL when
- * NEXT_PUBLIC_XGET_BASE_URL is set, so assets load reliably in China.
- *
- * Mapping: cdn.jsdelivr.net/gh/{owner}/{repo}/{path}
- *       → {XGET_BASE_URL}/gh/{owner}/{repo}/raw/main/{path}
- */
-const XGET_BASE = typeof process !== 'undefined' ? (process.env.NEXT_PUBLIC_XGET_BASE_URL ?? '') : '';
-
-function xgetBuddyUrl(cdnUrl: string): string {
-  if (!XGET_BASE) return cdnUrl;
-  const m = cdnUrl.match(/^https:\/\/cdn\.jsdelivr\.net\/gh\/([^/]+\/[^/]+)\/(.+)$/);
-  if (!m) return cdnUrl;
-  return `${XGET_BASE}/gh/${m[1]}/raw/main/${m[2]}`;
-}
-
-const CDN_BASE = 'https://cdn.jsdelivr.net/gh/microsoft/fluentui-emoji/assets';
-
 export const SPECIES_IMAGE_URL: Record<Species, string> = {
-  cat:      xgetBuddyUrl(`${CDN_BASE}/Cat/3D/cat_3d.png`),
-  duck:     xgetBuddyUrl(`${CDN_BASE}/Duck/3D/duck_3d.png`),
-  dragon:   xgetBuddyUrl(`${CDN_BASE}/Dragon/3D/dragon_3d.png`),
-  owl:      xgetBuddyUrl(`${CDN_BASE}/Owl/3D/owl_3d.png`),
-  penguin:  xgetBuddyUrl(`${CDN_BASE}/Penguin/3D/penguin_3d.png`),
-  turtle:   xgetBuddyUrl(`${CDN_BASE}/Turtle/3D/turtle_3d.png`),
-  octopus:  xgetBuddyUrl(`${CDN_BASE}/Octopus/3D/octopus_3d.png`),
-  ghost:    xgetBuddyUrl(`${CDN_BASE}/Ghost/3D/ghost_3d.png`),
-  axolotl:  xgetBuddyUrl(`${CDN_BASE}/Lizard/3D/lizard_3d.png`),
-  capybara: xgetBuddyUrl(`${CDN_BASE}/Beaver/3D/beaver_3d.png`),
-  robot:    xgetBuddyUrl(`${CDN_BASE}/Robot/3D/robot_3d.png`),
-  rabbit:   xgetBuddyUrl(`${CDN_BASE}/Rabbit/3D/rabbit_3d.png`),
-  mushroom: xgetBuddyUrl(`${CDN_BASE}/Mushroom/3D/mushroom_3d.png`),
-  fox:      xgetBuddyUrl(`${CDN_BASE}/Fox/3D/fox_3d.png`),
-  panda:    xgetBuddyUrl(`${CDN_BASE}/Panda/3D/panda_3d.png`),
-  whale:    xgetBuddyUrl(`${CDN_BASE}/Whale/3D/whale_3d.png`),
+  cat: '/buddy/cat.png',
+  duck: '/buddy/duck.png',
+  dragon: '/buddy/dragon.png',
+  owl: '/buddy/owl.png',
+  penguin: '/buddy/penguin.png',
+  turtle: '/buddy/turtle.png',
+  octopus: '/buddy/octopus.png',
+  ghost: '/buddy/ghost.png',
+  axolotl: '/buddy/lizard.png',
+  capybara: '/buddy/beaver.png',
+  robot: '/buddy/robot.png',
+  rabbit: '/buddy/rabbit.png',
+  mushroom: '/buddy/mushroom.png',
+  fox: '/buddy/fox.png',
+  panda: '/buddy/panda.png',
+  whale: '/buddy/whale.png',
 };
 
 // Egg image for unhatched state
-export const EGG_IMAGE_URL = xgetBuddyUrl(`${CDN_BASE}/Egg/3D/egg_3d.png`);
+export const EGG_IMAGE_URL = '/buddy/egg.png';
 
 export const RARITY_BG_GRADIENT: Record<Rarity, string> = {
   common: 'linear-gradient(135deg, #e2e8f0, #f1f5f9)',

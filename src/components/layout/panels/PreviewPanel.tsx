@@ -7,17 +7,39 @@ import { Button } from "@/components/ui/button";
 import { Light as SyntaxHighlighter } from "react-syntax-highlighter";
 import { useThemeFamily } from "@/lib/theme/context";
 import { resolveCodeTheme, resolveHljsStyle } from "@/lib/theme/code-themes";
-import { Streamdown } from "streamdown";
-import { cjk } from "@streamdown/cjk";
-import { code } from "@streamdown/code";
-import { math } from "@streamdown/math";
-import { mermaid } from "@streamdown/mermaid";
 import { usePanel } from "@/hooks/usePanel";
 import { useTranslation } from "@/hooks/useTranslation";
 import { ResizeHandle } from "@/components/layout/ResizeHandle";
 import type { FilePreview as FilePreviewType } from "@/types";
 
-const streamdownPlugins = { cjk, code, math, mermaid };
+// Lazy-load Streamdown and plugins — only loaded when rendered markdown is needed
+let _StreamdownComponent: typeof import("streamdown").Streamdown | null = null;
+let _streamdownPlugins: Record<string, unknown> | null = null;
+let _streamdownPromise: Promise<void> | null = null;
+
+function loadStreamdown(): Promise<void> {
+  if (_streamdownPromise) return _streamdownPromise;
+  _streamdownPromise = Promise.all([
+    import("streamdown"),
+    import("@streamdown/cjk"),
+    import("@streamdown/code"),
+    import("@streamdown/math"),
+    import("@streamdown/mermaid"),
+  ]).then(([sd, cjkMod, codeMod, mathMod, mermaidMod]) => {
+    _StreamdownComponent = sd.Streamdown;
+    _streamdownPlugins = {
+      cjk: cjkMod.cjk,
+      code: codeMod.code,
+      math: mathMod.math,
+      mermaid: mermaidMod.mermaid,
+    };
+  }).catch((err) => {
+    // Reset so next call retries instead of caching the rejected promise
+    _streamdownPromise = null;
+    throw err;
+  });
+  return _streamdownPromise;
+}
 
 type ViewMode = "source" | "rendered";
 
@@ -341,6 +363,12 @@ function RenderedView({
   filePath: string;
 }) {
   const { t } = useTranslation();
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    loadStreamdown().then(() => setReady(true)).catch(() => {});
+  }, []);
+
   if (isHtml(filePath)) {
     return (
       <iframe
@@ -352,15 +380,24 @@ function RenderedView({
     );
   }
 
-  // Markdown / MDX
+  // Markdown / MDX — wait for Streamdown to load
+  if (!ready || !_StreamdownComponent || !_streamdownPlugins) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <SpinnerGap size={20} className="animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  const Sd = _StreamdownComponent;
   return (
     <div className="px-6 py-4 overflow-x-hidden break-words">
-      <Streamdown
+      <Sd
         className="size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_ul]:pl-6 [&_ol]:pl-6"
-        plugins={streamdownPlugins}
+        plugins={_streamdownPlugins}
       >
         {content}
-      </Streamdown>
+      </Sd>
     </div>
   );
 }

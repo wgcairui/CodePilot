@@ -23,6 +23,7 @@ export default function ChatSessionPage({ params }: ChatSessionPageProps) {
   const [sessionInfoLoaded, setSessionInfoLoaded] = useState(false);
   const [sessionPermissionProfile, setSessionPermissionProfile] = useState<'default' | 'full_access'>('default');
   const [sessionMode, setSessionMode] = useState<'code' | 'plan'>('code');
+  const [sessionHasSummary, setSessionHasSummary] = useState(false);
   const { setWorkingDirectory, setSessionId, setSessionTitle: setPanelSessionTitle } = usePanel();
   const { t } = useTranslation();
 
@@ -60,6 +61,7 @@ export default function ChatSessionPage({ params }: ChatSessionPageProps) {
           setSessionProviderId(resolved.providerId);
           setSessionPermissionProfile(data.session.permission_profile || 'default');
           setSessionMode((data.session.mode as 'code' | 'plan') || 'code');
+          setSessionHasSummary(!!data.session.context_summary);
         }
       } catch {
         // Session info load failed - panel will still work without directory
@@ -132,7 +134,7 @@ export default function ChatSessionPage({ params }: ChatSessionPageProps) {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <ChatView key={id} sessionId={id} initialMessages={messages} initialHasMore={hasMore} modelName={sessionModel} providerId={sessionProviderId} initialPermissionProfile={sessionPermissionProfile} initialMode={sessionMode} />
+      <ChatView key={id} sessionId={id} initialMessages={messages} initialHasMore={hasMore} modelName={sessionModel} providerId={sessionProviderId} initialPermissionProfile={sessionPermissionProfile} initialMode={sessionMode} initialHasSummary={sessionHasSummary} />
     </div>
   );
 }

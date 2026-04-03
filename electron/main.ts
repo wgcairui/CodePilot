@@ -37,6 +37,7 @@ let serverErrors: string[] = [];
 let serverExited = false;
 let serverExitCode: number | null = null;
 let userShellEnv: Record<string, string> = {};
+let resolvedProxyEnv: Record<string, string> = {};
 let isQuitting = false;
 let tray: Tray | null = null;
 let bgNotifyTimer: ReturnType<typeof setInterval> | null = null;
@@ -396,6 +397,73 @@ function loadUserShellEnv(): Record<string, string> {
 }
 
 /**
+ * Resolve system proxy via Chromium's proxy resolution.
+ * Chinese users often use VPN tools (Clash, Surge, etc.) that set macOS system
+ * proxy but don't export HTTP_PROXY to shell env. This detects the system proxy
+ * and returns env vars to inject into child processes.
+ */
+async function resolveSystemProxy(): Promise<Record<string, string>> {
+  const env: Record<string, string> = {};
+  try {
+    const proxyList = await session.defaultSession.resolveProxy('https://registry.npmjs.org');
+    if (!proxyList || proxyList === 'DIRECT') return env;
+
+    // Chromium returns an ordered list: "PROXY host:port; SOCKS5 host:port; DIRECT"
+    // Split on ';' and use the first non-DIRECT entry.
+    for (const entry of proxyList.split(';')) {
+      const trimmed = entry.trim();
+      if (!trimmed || trimmed === 'DIRECT') continue;
+
+      const httpMatch = trimmed.match(/^(?:PROXY|HTTPS)\s+([\w.-]+:\d+)$/i);
+      if (httpMatch) {
+        env.HTTP_PROXY = `http://${httpMatch[1]}`;
+        env.HTTPS_PROXY = `http://${httpMatch[1]}`;
+        console.log('[proxy] System proxy detected:', env.HTTPS_PROXY);
+        return env;
+      }
+
+      const socksMatch = trimmed.match(/^SOCKS5?\s+([\w.-]+:\d+)$/i);
+      if (socksMatch) {
+        env.HTTP_PROXY = `socks5://${socksMatch[1]}`;
+        env.HTTPS_PROXY = `socks5://${socksMatch[1]}`;
+        console.log('[proxy] System SOCKS proxy detected:', env.HTTPS_PROXY);
+        return env;
+      }
+    }
+  } catch (err) {
+    console.warn('[proxy] Failed to resolve system proxy:', err);
+  }
+  return env;
+}
+
+/**
+ * Check if Git Bash (bash.exe) is available on Windows.
+ * Mirrors the detection logic in platform.ts:findGitBash().
+ */
+function findGitBashSync(): boolean {
+  if (process.platform !== 'win32') return true;
+  // 1. User-specified env var
+  const envBash = process.env.CLAUDE_CODE_GIT_BASH_PATH || userShellEnv.CLAUDE_CODE_GIT_BASH_PATH;
+  if (envBash && fs.existsSync(envBash)) return true;
+  // 2. Common paths
+  if (fs.existsSync('C:\\Program Files\\Git\\bin\\bash.exe')) return true;
+  if (fs.existsSync('C:\\Program Files (x86)\\Git\\bin\\bash.exe')) return true;
+  // 3. Derive from `where git`
+  try {
+    const result = execFileSync('where', ['git'], {
+      timeout: 3000, encoding: 'utf-8', shell: true, stdio: 'pipe',
+    });
+    for (const line of result.trim().split(/\r?\n/)) {
+      const gitExe = line.trim();
+      if (!gitExe) continue;
+      const bashPath = path.join(path.dirname(path.dirname(gitExe)), 'bin', 'bash.exe');
+      if (fs.existsSync(bashPath)) return true;
+    }
+  } catch { /* where git failed */ }
+  return false;
+}
+
+/**
  * Build an expanded PATH that includes common locations for node, npm globals,
  * claude, nvm, homebrew, etc. Shared by the server launcher and install orchestrator.
  */
@@ -503,6 +571,8 @@ function startServer(port: number): Electron.UtilityProcess {
     ...sanitizedProcessEnv(),
     // Ensure user shell env vars override (especially API keys)
     ...userShellEnv,
+    // Inject system proxy (only if not already set in shell env)
+    ...(!userShellEnv.HTTP_PROXY && !userShellEnv.HTTPS_PROXY ? resolvedProxyEnv : {}),
     PORT: String(port),
     HOSTNAME: '127.0.0.1',
     CLAUDE_GUI_DATA_DIR: path.join(home, '.codepilot'),
@@ -647,6 +717,9 @@ function createWindow(url?: string) {
 app.whenReady().then(async () => {
   // Load user's full shell environment (API keys, PATH, etc.)
   userShellEnv = loadUserShellEnv();
+
+  // Detect system proxy for Chinese users behind VPN (Clash, Surge, etc.)
+  resolvedProxyEnv = await resolveSystemProxy();
 
   // Verify native module ABI compatibility before starting the server
   checkNativeModuleABI();
@@ -837,8 +910,12 @@ app.whenReady().then(async () => {
       throw new Error('Installation is already running');
     }
 
-    // Reset state — native installer needs no Node.js prerequisite
+    // On Windows, check if Git Bash is missing and prepend an install step
+    const isWin = process.platform === 'win32';
+    const needsGit = isWin && !findGitBashSync();
+
     const steps: InstallStep[] = [
+      ...(needsGit ? [{ id: 'install-git', label: 'Installing Git for Windows', status: 'pending' as const }] : []),
       { id: 'install-claude', label: 'Installing Claude Code (native)', status: 'pending' },
       { id: 'verify', label: 'Verifying installation', status: 'pending' },
     ];
@@ -881,7 +958,51 @@ app.whenReady().then(async () => {
     // Run the installation sequence asynchronously
     (async () => {
       try {
-        const isWin = process.platform === 'win32';
+        // Step 0 (Windows only): Install Git for Windows if missing
+        if (needsGit) {
+          setStep('install-git', 'running');
+          addLog('Installing Git for Windows via winget...');
+
+          const gitSuccess = await new Promise<boolean>((resolve) => {
+            const child = spawn('winget', [
+              'install', 'Git.Git',
+              '--silent',
+              '--accept-package-agreements',
+              '--accept-source-agreements',
+            ], {
+              env: execEnv,
+              shell: true,
+              stdio: ['ignore', 'pipe', 'pipe'],
+            });
+            installProcess = child;
+
+            child.stdout?.on('data', (data: Buffer) => {
+              for (const line of data.toString().split('\n').filter(Boolean)) addLog(line);
+            });
+            child.stderr?.on('data', (data: Buffer) => {
+              for (const line of data.toString().split('\n').filter(Boolean)) addLog(line);
+            });
+            child.on('error', (err) => { addLog(`Error: ${err.message}`); resolve(false); });
+            child.on('close', (code) => {
+              installProcess = null;
+              resolve(code === 0);
+            });
+          });
+
+          if (installState.status === 'cancelled') {
+            setStep('install-git', 'failed', 'Cancelled');
+            return;
+          }
+          if (!gitSuccess) {
+            // Non-fatal: skip Git install and continue with Claude.
+            // The user can install Git manually later.
+            addLog('winget not available or install failed. Skipping — please install Git for Windows manually from https://git-scm.com/downloads/win');
+            setStep('install-git', 'skipped', 'Auto-install skipped. Please install Git manually.');
+          } else {
+            addLog('Git for Windows installed successfully.');
+            setStep('install-git', 'success');
+          }
+        }
 
         // Step 1: Install Claude Code via native installer
         setStep('install-claude', 'running');
@@ -1066,6 +1187,40 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('install:get-logs', () => {
     return installState.logs;
+  });
+
+  // Install Git for Windows via winget (called from ConnectionStatus dialog)
+  ipcMain.handle('install:git', async () => {
+    if (process.platform !== 'win32') {
+      return { success: false, error: 'Git installation is only needed on Windows' };
+    }
+    try {
+      const expandedPath = getExpandedShellPath();
+      const execEnv = { ...sanitizedProcessEnv(), ...userShellEnv, PATH: expandedPath };
+
+      const result = await new Promise<{ success: boolean; output: string }>((resolve) => {
+        let output = '';
+        const child = spawn('winget', [
+          'install', 'Git.Git',
+          '--silent',
+          '--accept-package-agreements',
+          '--accept-source-agreements',
+        ], {
+          env: execEnv,
+          shell: true,
+          stdio: ['ignore', 'pipe', 'pipe'],
+        });
+
+        child.stdout?.on('data', (data: Buffer) => { output += data.toString(); });
+        child.stderr?.on('data', (data: Buffer) => { output += data.toString(); });
+        child.on('error', (err) => { resolve({ success: false, output: err.message }); });
+        child.on('close', (code) => { resolve({ success: code === 0, output: output.trim() }); });
+      });
+
+      return result;
+    } catch (err) {
+      return { success: false, output: '', error: err instanceof Error ? err.message : String(err) };
+    }
   });
 
   // --- End install wizard IPC handlers ---
@@ -1286,6 +1441,15 @@ app.whenReady().then(async () => {
     } catch (err) {
       console.error('[notification] Failed to show:', err);
       return false;
+    }
+  });
+
+  // Proxy resolution IPC — allows renderer/API routes to query system proxy
+  ipcMain.handle('proxy:resolve', async (_event, url: string) => {
+    try {
+      return await session.defaultSession.resolveProxy(url);
+    } catch {
+      return 'DIRECT';
     }
   });
 

@@ -342,15 +342,8 @@ describe('Assistant Workspace', () => {
       assert.ok(fs.existsSync(path.join(workDir, 'PATH.ai.md')));
     });
 
-    it('should include root docs in loaded files', () => {
-      initializeWorkspace(workDir);
-      fs.mkdirSync(path.join(workDir, 'notes'));
-      generateRootDocs(workDir);
-
-      const files = loadWorkspaceFiles(workDir);
-      assert.ok(files.rootReadme, 'Should have rootReadme');
-      assert.ok(files.rootPath, 'Should have rootPath');
-    });
+    // Root docs are now accessed via MCP tools, not loaded into workspace files.
+    // The generateRootDocs function still works; we just don't load them into files.
   });
 });
 

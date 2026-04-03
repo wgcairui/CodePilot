@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { streamClaude } from '@/lib/claude-client';
-import { addMessage, getMessages, getSession, updateSessionTitle, updateSdkSessionId, updateSessionModel, updateSessionProvider, updateSessionProviderId, getSetting, acquireSessionLock, renewSessionLock, releaseSessionLock, setSessionRuntimeStatus, syncSdkTasks } from '@/lib/db';
+import { addMessage, getMessages, getSession, getSessionSummary, updateSessionTitle, updateSdkSessionId, updateSessionModel, updateSessionProvider, updateSessionProviderId, getSetting, acquireSessionLock, renewSessionLock, releaseSessionLock, setSessionRuntimeStatus, syncSdkTasks } from '@/lib/db';
 import { resolveProvider as resolveProviderUnified } from '@/lib/provider-resolver';
 import { notifySessionStart, notifySessionComplete, notifySessionError } from '@/lib/telegram-bot';
 import { extractCompletion } from '@/lib/onboarding-completion';
@@ -55,6 +55,49 @@ export async function POST(request: NextRequest) {
     activeSessionId = session_id;
     activeLockId = lockId;
     setSessionRuntimeStatus(session_id, 'running');
+
+    // ── /compact command handler ────────────────────────────────────
+    if (content.trim() === '/compact') {
+      try {
+        const { compressConversation, resetCompressionState } = await import('@/lib/context-compressor');
+        const { getMessages: getDbMessages, getSessionSummary: getDbSummary, updateSessionSummary: updateDbSummary, addMessage: addDbMessage } = await import('@/lib/db');
+
+        resetCompressionState(session_id);
+        const { messages: allMsgs } = getDbMessages(session_id, { limit: 200, excludeHeartbeatAck: true });
+        const existingSummary = getDbSummary(session_id).summary;
+
+        if (allMsgs.length < 4) {
+          const msg = '对话还很短，暂不需要压缩。';
+          addDbMessage(session_id, 'assistant', JSON.stringify([{ type: 'text', text: msg }]));
+          releaseSessionLock(session_id, lockId);
+          setSessionRuntimeStatus(session_id, 'idle');
+          const sseData = `data: ${JSON.stringify({ type: 'text', data: msg })}\n\ndata: ${JSON.stringify({ type: 'done' })}\n\n`;
+          return new Response(sseData, { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' } });
+        }
+
+        const msgData = allMsgs.map(m => ({ role: m.role, content: m.content }));
+        const result = await compressConversation({
+          sessionId: session_id,
+          messages: msgData,
+          existingSummary: existingSummary || undefined,
+          providerId: provider_id || session.provider_id || undefined,
+          sessionModel: model || session.model || undefined,
+        });
+
+        updateDbSummary(session_id, result.summary);
+        const msg = `上下文已压缩。压缩了 ${result.messagesCompressed} 条消息，预计节省 ~${Math.round(result.estimatedTokensSaved / 1000)}K tokens。`;
+        addDbMessage(session_id, 'assistant', JSON.stringify([{ type: 'text', text: msg }]));
+        releaseSessionLock(session_id, lockId);
+        setSessionRuntimeStatus(session_id, 'idle');
+        const sseData = `data: ${JSON.stringify({ type: 'text', data: msg })}\n\ndata: ${JSON.stringify({ type: 'done' })}\n\n`;
+        return new Response(sseData, { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' } });
+      } catch (compactErr) {
+        console.error('[chat API] /compact failed:', compactErr);
+        releaseSessionLock(session_id, lockId);
+        setSessionRuntimeStatus(session_id, 'idle');
+        return new Response(JSON.stringify({ error: 'Compression failed' }), { status: 500, headers: { 'Content-Type': 'application/json' } });
+      }
+    }
 
     // Telegram notification: session started (fire-and-forget)
     // Skip for auto-trigger turns (onboarding/heartbeat) — these are invisible system triggers
@@ -155,21 +198,24 @@ export async function POST(request: NextRequest) {
             name: f.name,
             type: f.type,
             size: f.size,
-            data: (meta?.filePath && !f.type.startsWith('image/')) ? '' : f.data, // Keep base64 for images (needed for vision); clear for non-images (read from disk)
+            data: meta?.filePath ? '' : f.data, // Clear base64 once written to disk — claude-client reads from filePath on demand
             filePath: meta?.filePath,
           };
         })
       : undefined;
 
-    // Load recent conversation history from DB as fallback context.
-    // This is used when SDK session resume is unavailable or fails,
-    // so the model still has conversation context.
-    const { messages: recentMsgs } = getMessages(session_id, { limit: 50, excludeHeartbeatAck: true });
+    // Load conversation history from DB as fallback context.
+    // Fetch up to 200 messages (DB query is cheap); actual truncation is done
+    // by buildFallbackContext using a token budget, not a fixed message count.
+    const { messages: recentMsgs } = getMessages(session_id, { limit: 200, excludeHeartbeatAck: true });
     // Exclude the user message we just saved (last in the list) — it's already the prompt
     const historyMsgs = recentMsgs.slice(0, -1).map(m => ({
       role: m.role as 'user' | 'assistant',
       content: m.content,
     }));
+
+    // Load session summary for compression-aware fallback
+    const sessionSummaryData = getSessionSummary(session_id);
 
     // Detect actual image agent mode by checking for the specific design agent prompt,
     // not just any systemPromptAppend (which could come from CLI badges or skills).
@@ -193,6 +239,88 @@ export async function POST(request: NextRequest) {
     // Load only MCP servers needing CodePilot-specific processing (${...} env placeholders).
     // All other MCP servers are auto-loaded by the SDK via settingSources.
     const mcpServers = loadCodePilotMcpServers();
+
+    // ── Context compression check ───────────────────────────────────
+    // Estimate next-turn context size and compress if over threshold.
+    let activeSessionSummary = sessionSummaryData.summary || undefined;
+    let fallbackTokenBudget: number | undefined;
+    let compressionOccurred = false;
+
+    try {
+      const { estimateContextTokens } = await import('@/lib/context-estimator');
+      const { getContextWindow } = await import('@/lib/model-context');
+      const { needsCompression, compressConversation } = await import('@/lib/context-compressor');
+      const { updateSessionSummary } = await import('@/lib/db');
+
+      const modelForWindow = resolved.upstreamModel || resolved.model || effectiveModel || 'sonnet';
+      const contextWindow = getContextWindow(modelForWindow, { context1m: context_1m }) || 200000;
+
+      // Estimate using normalized content (matches what buildFallbackContext actually sends).
+      // Raw transcript overestimates tool-heavy conversations because normalize + microcompact
+      // strip metadata and truncate old tool results significantly.
+      const { normalizeMessageContent, microCompactMessage } = await import('@/lib/message-normalizer');
+      const { roughTokenEstimate } = await import('@/lib/context-estimator');
+      const normalizedHistory = historyMsgs.map((m, i) => ({
+        role: m.role,
+        content: microCompactMessage(m.role, normalizeMessageContent(m.role, m.content), historyMsgs.length - 1 - i),
+      }));
+
+      const estimate = estimateContextTokens({
+        systemPrompt: finalSystemPrompt,
+        history: normalizedHistory,
+        currentUserMessage: content,
+        sessionSummary: activeSessionSummary,
+      });
+
+      // Budget for history = 70% of window minus system prompt, summary, and current user message.
+      // buildFallbackContext adds summary + prompt on top of the history, so we must account for them.
+      fallbackTokenBudget = Math.floor(
+        contextWindow * 0.7 - estimate.breakdown.system - estimate.breakdown.summary - estimate.breakdown.userMessage
+      );
+
+      if (needsCompression(estimate.total, contextWindow, session_id)) {
+        console.log(`[chat API] Context at ${((estimate.total / contextWindow) * 100).toFixed(1)}% — triggering compression`);
+
+        // Determine which messages to compress using normalized sizes (consistent with estimate)
+        const recentBudget = Math.floor(contextWindow * 0.5);
+        const messagesToKeep: typeof historyMsgs = [];
+        let keptTokens = 0;
+        for (let i = normalizedHistory.length - 1; i >= 0; i--) {
+          const msgTokens = roughTokenEstimate(normalizedHistory[i].content) + 10;
+          if (keptTokens + msgTokens > recentBudget) break;
+          messagesToKeep.unshift(historyMsgs[i]); // Keep raw msg for compression input
+          keptTokens += msgTokens;
+        }
+        const messagesToCompress = historyMsgs.slice(0, historyMsgs.length - messagesToKeep.length);
+
+        if (messagesToCompress.length > 0) {
+          try {
+            const result = await compressConversation({
+              sessionId: session_id,
+              messages: messagesToCompress,
+              existingSummary: activeSessionSummary,
+              providerId: effectiveProviderId || undefined,
+              sessionModel: effectiveModel || undefined,
+            });
+            activeSessionSummary = result.summary;
+            updateSessionSummary(session_id, result.summary);
+            // Recalculate budget with new (larger) summary
+            const newSummaryTokens = roughTokenEstimate(result.summary);
+            const userMsgTokens = roughTokenEstimate(content);
+            fallbackTokenBudget = Math.floor(
+              contextWindow * 0.7 - estimate.breakdown.system - newSummaryTokens - userMsgTokens
+            );
+            // Flag so we can notify frontend via a leading SSE event
+            compressionOccurred = true;
+            console.log(`[chat API] Compressed ${result.messagesCompressed} messages, saved ~${result.estimatedTokensSaved} tokens`);
+          } catch (compErr) {
+            console.warn('[chat API] Compression failed, proceeding without:', compErr);
+          }
+        }
+      }
+    } catch (estimateErr) {
+      console.warn('[chat API] Context estimation failed, proceeding without compression:', estimateErr);
+    }
 
     // Stream Claude response, using SDK session ID for resume if available
     console.log('[chat API] streamClaude params:', {
@@ -219,6 +347,8 @@ export async function POST(request: NextRequest) {
       sessionProviderId: session.provider_id || undefined,
       mcpServers,
       conversationHistory: historyMsgs,
+      sessionSummary: activeSessionSummary,
+      fallbackTokenBudget,
       bypassPermissions,
       thinking: thinking as ClaudeStreamOptions['thinking'],
       effort: effort as ClaudeStreamOptions['effort'],
@@ -247,7 +377,26 @@ export async function POST(request: NextRequest) {
       setSessionRuntimeStatus(session_id, 'idle');
     }, { isHeartbeatTurn, suppressNotifications: !!autoTrigger });
 
-    return new Response(streamForClient, {
+    // If auto-compression happened, prepend a notification event to the stream
+    const responseStream = compressionOccurred
+      ? new ReadableStream<string>({
+          async start(controller) {
+            controller.enqueue(`data: ${JSON.stringify({ type: 'status', data: JSON.stringify({ notification: true, message: 'context_compressed' }) })}\n\n`);
+            const reader = streamForClient.getReader();
+            try {
+              while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+                controller.enqueue(value);
+              }
+            } finally {
+              controller.close();
+            }
+          },
+        })
+      : streamForClient;
+
+    return new Response(responseStream, {
       headers: {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache',
