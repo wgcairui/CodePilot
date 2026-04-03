@@ -98,8 +98,8 @@ npx tsx --test src/__tests__/unit/foo.test.ts
 **`/api/providers` 返回的 api_key 是 masked（`***...`）：**
 - 前端无法直接读取原始 key；需调用专用端点或后端复制逻辑
 
-**Buddy 图片 CDN（国内访问）：**
-- `cdn.jsdelivr.net` 在国内不可用，buddy 图片通过 `.env.local` 的 `NEXT_PUBLIC_XGET_BASE_URL` 代理到 Xget（当前值 `https://xget.xi.cx`）
+**Buddy 图片（本地静态资源）：**
+- Buddy 图片已打包到 `public/buddy/*.png`，通过 `/buddy/cat.png` 等路径直接访问，无 CDN 依赖
 - `src/components/ui/buddy-avatar.tsx` — 统一渲染 buddy/egg 图片，内置 `onError` emoji fallback；所有地方应使用此组件而非裸 `<img src={SPECIES_IMAGE_URL[...]}>`
 
 **Turbopack 热更新残留（⚠️ 常见误判）：**

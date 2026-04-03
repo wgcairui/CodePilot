@@ -13,8 +13,8 @@ interface BuddyAvatarProps {
 }
 
 /**
- * Renders the buddy/egg CDN image with an emoji fallback when the image fails to load.
- * Needed because cdn.jsdelivr.net is unreliable in some regions.
+ * Renders the buddy/egg image with an emoji fallback when the image fails to load.
+ * Images are served from /public/buddy/ as local static assets.
  */
 export function BuddyAvatar({ species, size = 24, className, style }: BuddyAvatarProps) {
   // Track the src that errored, not a boolean, so a species change resets the error state.

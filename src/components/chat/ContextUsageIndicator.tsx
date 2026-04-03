@@ -125,7 +125,7 @@ export function ContextUsageIndicator({ messages, modelName, context1m, hasSumma
             {usage.hasSummary && (
               <div className="flex justify-between border-t border-border pt-1.5 mt-1.5">
                 <span className="text-muted-foreground">{t('context.summary')}</span>
-                <span className="text-green-600 dark:text-green-400">{t('context.summaryActive')}</span>
+                <span className="text-status-success">{t('context.summaryActive')}</span>
               </div>
             )}
             {usage.state !== 'normal' && (
