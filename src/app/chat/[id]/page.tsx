@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, use } from 'react';
+import { useEffect, useState, useRef, use } from 'react';
 import Link from 'next/link';
 import type { Message, MessagesResponse, ChatSession } from '@/types';
 import { ChatView } from '@/components/chat/ChatView';
@@ -24,8 +24,9 @@ export default function ChatSessionPage({ params }: ChatSessionPageProps) {
   const [sessionPermissionProfile, setSessionPermissionProfile] = useState<'default' | 'full_access'>('default');
   const [sessionMode, setSessionMode] = useState<'code' | 'plan'>('code');
   const [sessionHasSummary, setSessionHasSummary] = useState(false);
-  const { setWorkingDirectory, setSessionId, setSessionTitle: setPanelSessionTitle } = usePanel();
+  const { setWorkingDirectory, setSessionId, setSessionTitle: setPanelSessionTitle, setFileTreeOpen, setGitPanelOpen, setDashboardPanelOpen } = usePanel();
   const { t } = useTranslation();
+  const defaultPanelAppliedRef = useRef(false);
 
   // Load session info and set working directory
   useEffect(() => {
@@ -76,6 +77,7 @@ export default function ChatSessionPage({ params }: ChatSessionPageProps) {
 
   useEffect(() => {
     // Reset state when switching sessions
+    defaultPanelAppliedRef.current = false;
     setLoading(true);
     setError(null);
     setMessages([]);
@@ -110,6 +112,41 @@ export default function ChatSessionPage({ params }: ChatSessionPageProps) {
 
     return () => { cancelled = true; };
   }, [id]);
+
+  // Auto-open default panel the first time a session is ever opened.
+  // Uses sessionStorage to track which sessions have already been initialized,
+  // so re-opening an untouched (zero-message) session won't override the layout.
+  useEffect(() => {
+    if (defaultPanelAppliedRef.current) return;
+    defaultPanelAppliedRef.current = true;
+
+    const storageKey = `codepilot:panel-init:${id}`;
+    if (typeof window !== 'undefined' && sessionStorage.getItem(storageKey)) return;
+
+    if (typeof window !== 'undefined') {
+      sessionStorage.setItem(storageKey, '1');
+    }
+
+    (async () => {
+      try {
+        const res = await fetch('/api/settings/app');
+        if (!res.ok) return;
+        const data = await res.json();
+        const panel = data.settings?.default_panel || 'file_tree';
+        if (panel === 'none') {
+          setFileTreeOpen(false);
+          setGitPanelOpen(false);
+          setDashboardPanelOpen(false);
+        } else {
+          setFileTreeOpen(panel === 'file_tree');
+          setGitPanelOpen(panel === 'git');
+          setDashboardPanelOpen(panel === 'dashboard');
+        }
+      } catch {
+        setFileTreeOpen(true);
+      }
+    })();
+  }, [id, setFileTreeOpen, setGitPanelOpen, setDashboardPanelOpen]);
 
   if (loading || !sessionInfoLoaded) {
     return (

@@ -945,6 +945,11 @@ function migrateDb(db: Database.Database): void {
   safeAddColumn(db, "ALTER TABLE scheduled_tasks ADD COLUMN bridge_channel_type TEXT");
   safeAddColumn(db, "ALTER TABLE scheduled_tasks ADD COLUMN bridge_chat_id TEXT");
 
+  // Migration: set default_panel to 'file_tree' only if not already configured
+  db.prepare(
+    "INSERT OR IGNORE INTO settings (key, value) VALUES ('default_panel', 'file_tree')"
+  ).run();
+
   // Task execution history
   db.exec(`
     CREATE TABLE IF NOT EXISTS task_run_logs (

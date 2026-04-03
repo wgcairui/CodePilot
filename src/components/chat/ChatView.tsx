@@ -285,12 +285,9 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
           const isAssistant = !!data.path;
           setIsAssistantProject(isAssistant);
           setWorkspaceMismatchPath(null);
-          // Assistant project: show dashboard (with assistant status card) instead of file tree
           setIsAssistantWorkspace(isAssistant);
-          if (isAssistant) {
-            setFileTreeOpen(false);
-            setDashboardPanelOpen(true);
-          }
+          // Default panel is now controlled by the user's "Default Side Panel" setting
+          // in chat/[id]/page.tsx — no longer force-override for assistant workspaces.
           // Load assistant name for avatar display
           if (data.path) {
             try {
