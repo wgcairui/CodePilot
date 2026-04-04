@@ -862,7 +862,6 @@ function migrateDb(db: Database.Database): void {
   );
 
   // Migration: backfill empty protocol for legacy custom providers using URL-based inference.
-  // Note: openai-compatible providers (e.g. Ollama) are now supported via the Vercel AI SDK path.
   try {
     const providerCols = db.prepare("PRAGMA table_info(api_providers)").all() as { name: string }[];
     if (providerCols.some(c => c.name === 'protocol')) {

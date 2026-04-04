@@ -164,6 +164,7 @@ interface MessageListProps {
   toolUses?: ToolUseInfo[];
   toolResults?: ToolResultInfo[];
   streamingToolOutput?: string;
+  streamingThinkingContent?: string;
   statusText?: string;
   onForceStop?: () => void;
   hasMore?: boolean;
@@ -185,6 +186,7 @@ export function MessageList({
   toolUses = [],
   toolResults = [],
   streamingToolOutput,
+  streamingThinkingContent,
   statusText,
   onForceStop,
   hasMore,
@@ -314,6 +316,7 @@ export function MessageList({
             toolUses={toolUses}
             toolResults={toolResults}
             streamingToolOutput={streamingToolOutput}
+            thinkingContent={streamingThinkingContent}
             statusText={statusText}
             onForceStop={onForceStop}
           />

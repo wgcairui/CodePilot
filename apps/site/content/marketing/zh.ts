@@ -3,7 +3,7 @@ import type { MarketingContent } from './en';
 export const zh: MarketingContent = {
   hero: {
     title: 'CodePilot',
-    tagline: '你的桌面 AI Agent，专注',
+    tagline: '你的多模型 AI Agent，专注',
     cta: '下载',
     secondaryCta: '查看文档',
     screenshots: [
@@ -15,8 +15,8 @@ export const zh: MarketingContent = {
     ],
   },
   features: {
-    title: '使用 Claude Code 所需的一切',
-    titleLight: '对话、Provider、扩展和项目上下文——集于一处。',
+    title: '一个客户端，连接所有 AI 服务商',
+    titleLight: '对话、17+ 服务商、MCP 扩展和项目上下文——集于一处。',
     subtitle: '',
     items: [
       {
@@ -93,8 +93,8 @@ export const zh: MarketingContent = {
         a: '是的。CodePilot 完全免费且开源，你只需为所选 Provider 的 API 用量付费。',
       },
       {
-        q: '支持哪些 AI Provider？',
-        a: 'Anthropic、OpenAI、Google、AWS Bedrock 以及任何 OpenAI 兼容接口，随时切换。',
+        q: '支持哪些 AI 服务商？',
+        a: 'Anthropic、OpenRouter、AWS Bedrock、Google Vertex、智谱 GLM、Kimi、Moonshot、MiniMax、火山引擎方舟、小米 MiMo、阿里云百炼、Ollama、LiteLLM，以及任何 Anthropic 兼容或 OpenAI 兼容端点——开箱即用支持 17+ 个服务商。',
       },
       {
         q: '需要 Claude Code 订阅吗？',
@@ -112,7 +112,7 @@ export const zh: MarketingContent = {
   },
   audience: {
     title: '为日常使用而设计。',
-    subtitle: '面向每天依赖 Claude Code 的开发者。',
+    subtitle: '面向每天与 AI 协作的开发者。',
     items: [
       {
         title: '长期代码库',
@@ -137,17 +137,17 @@ export const zh: MarketingContent = {
     steps: [
       {
         step: '1',
-        title: '安装 Claude Code CLI',
-        description: '安装并用 Anthropic 账户登录。',
+        title: '下载 CodePilot',
+        description: '支持 macOS、Windows 和 Linux。',
       },
       {
         step: '2',
-        title: '下载 CodePilot',
-        description: '配置你偏好的 Provider。',
+        title: '添加 AI 服务商',
+        description: '从 17+ 个预设中选择，或添加自定义端点。',
       },
       {
         step: '3',
-        title: '开始会话',
+        title: '开始对话',
         description: '按需连接 Workspace、MCP 或 Bridge。',
       },
     ],
@@ -169,7 +169,7 @@ export const zh: MarketingContent = {
   },
   cta: {
     title: '准备好试试 CodePilot 了吗？',
-    description: '下载并开始在桌面工作区中使用 Claude Code。',
+    description: '下载并连接你喜欢的 AI 服务商，几分钟即可开始。',
     primary: '下载',
     secondary: '阅读文档',
   },

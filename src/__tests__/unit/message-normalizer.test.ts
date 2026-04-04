@@ -27,6 +27,45 @@ describe('normalizeMessageContent', () => {
     const result = normalizeMessageContent('assistant', raw);
     assert.ok(result.includes('used Bash'));
   });
+
+  it('extracts reasoning summary from thinking-only messages', () => {
+    const raw = JSON.stringify([
+      { type: 'thinking', thinking: '**Analyzing the codebase**\nLooking at the structure...' },
+    ]);
+    const result = normalizeMessageContent('assistant', raw);
+    assert.ok(result.includes('reasoning:'));
+    assert.ok(result.includes('Analyzing the codebase'));
+    assert.ok(!result.includes('used tools'));
+  });
+
+  it('extracts heading-based summary from thinking blocks', () => {
+    const raw = JSON.stringify([
+      { type: 'thinking', thinking: '# Planning the approach\nFirst step is...' },
+    ]);
+    const result = normalizeMessageContent('assistant', raw);
+    assert.ok(result.includes('Planning the approach'));
+  });
+
+  it('handles thinking + text + tool_use combined messages', () => {
+    const raw = JSON.stringify([
+      { type: 'thinking', thinking: '**Deciding which files to read**' },
+      { type: 'text', text: 'Let me check the code.' },
+      { type: 'tool_use', name: 'Read', input: { file_path: '/src/index.ts' } },
+    ]);
+    const result = normalizeMessageContent('assistant', raw);
+    assert.ok(result.includes('reasoning:'));
+    assert.ok(result.includes('Let me check the code.'));
+    assert.ok(result.includes('used Read'));
+  });
+
+  it('truncates long thinking content in summary', () => {
+    const raw = JSON.stringify([
+      { type: 'thinking', thinking: 'A'.repeat(200) },
+    ]);
+    const result = normalizeMessageContent('assistant', raw);
+    assert.ok(result.length < 200);
+    assert.ok(result.includes('reasoning:'));
+  });
 });
 
 describe('microCompactMessage', () => {

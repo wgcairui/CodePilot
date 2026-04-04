@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from '@/hooks/useTranslation';
 import {
   Message as AIMessage,
@@ -109,8 +109,66 @@ interface StreamingMessageProps {
   toolUses?: ToolUseInfo[];
   toolResults?: ToolResultInfo[];
   streamingToolOutput?: string;
+  thinkingContent?: string;
   statusText?: string;
   onForceStop?: () => void;
+}
+
+/**
+ * Smart content buffering — holds initial text until meaningful, but bypasses
+ * for structured blocks (show-widget, batch-plan, image-gen-request).
+ */
+const BUFFER_WORD_THRESHOLD = 40;
+const BUFFER_MAX_MS = 2500;
+const STRUCTURED_BLOCK_RE = /```(show-widget|batch-plan|image-gen-request)/;
+
+function useBufferedContent(rawContent: string, isStreaming: boolean): string {
+  const [bypassed, setBypassed] = useState(false);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Derive whether bypass conditions are met (pure computation, no side effects)
+  const shouldBypass = !isStreaming
+    || bypassed
+    || (!!rawContent && STRUCTURED_BLOCK_RE.test(rawContent))
+    || (!!rawContent && rawContent.split(/\s+/).filter(Boolean).length >= BUFFER_WORD_THRESHOLD);
+
+  // Effect: sync bypass state when conditions are met (one-way latch, safe)
+  useEffect(() => {
+    if (shouldBypass && !bypassed && isStreaming && rawContent) {
+      setBypassed(true); // eslint-disable-line react-hooks/set-state-in-effect
+    }
+  }, [shouldBypass, bypassed, isStreaming, rawContent]);
+
+  // Effect: reset on new turn (content emptied)
+  useEffect(() => {
+    if (!rawContent && !isStreaming) {
+      setBypassed(false); // eslint-disable-line react-hooks/set-state-in-effect
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
+    }
+  }, [rawContent, isStreaming]);
+
+  // Effect: max timeout — starts once when content first arrives during streaming.
+  // Uses a boolean gate (hasContent) so the timer is created exactly once, not on every delta.
+  const hasContent = !!rawContent;
+  useEffect(() => {
+    if (!isStreaming || bypassed || !hasContent) return;
+    // Only start the timer if one isn't already running
+    if (timerRef.current) return;
+    timerRef.current = setTimeout(() => {
+      setBypassed(true);
+      timerRef.current = null;
+    }, BUFFER_MAX_MS);
+    // No cleanup — timer must survive rawContent changes.
+    // It is cleaned up by the reset effect (when content empties) or when bypassed is set.
+  }, [isStreaming, bypassed, hasContent]);
+
+  // Pure render: no side effects
+  if (!isStreaming) return rawContent;
+  if (shouldBypass) return rawContent;
+  return '';
 }
 
 /**
@@ -205,10 +263,12 @@ export function StreamingMessage({
   toolUses = [],
   toolResults = [],
   streamingToolOutput,
+  thinkingContent,
   statusText,
   onForceStop,
 }: StreamingMessageProps) {
   const { t } = useTranslation();
+  const bufferedContent = useBufferedContent(content, isStreaming);
   const runningTools = toolUses.filter(
     (tool) => !toolResults.some((r) => r.tool_use_id === tool.id)
   );
@@ -234,8 +294,8 @@ export function StreamingMessage({
   return (
     <AIMessage from="assistant">
       <MessageContent>
-        {/* Tool calls — compact collapsible group */}
-        {toolUses.length > 0 && (
+        {/* Tool calls + thinking — single collapsible group */}
+        {(toolUses.length > 0 || thinkingContent) && (
           <ToolActionsGroup
             tools={toolUses.map((tool) => {
               const result = toolResults.find((r) => r.tool_use_id === tool.id);
@@ -250,6 +310,7 @@ export function StreamingMessage({
             })}
             isStreaming={isStreaming}
             streamingToolOutput={streamingToolOutput}
+            thinkingContent={thinkingContent}
           />
         )}
 
@@ -437,7 +498,9 @@ export function StreamingMessage({
           if (isStreaming) {
             const hasImageGenBlock = /```image-gen-request/.test(content);
             const hasBatchPlanBlock = /```batch-plan/.test(content);
-            const stripped = content
+            // Use bufferedContent for plain text to avoid initial character flicker
+            const textToRender = bufferedContent || '';
+            const stripped = textToRender
               .replace(/```image-gen-request[\s\S]*$/, '')
               .replace(/```batch-plan[\s\S]*$/, '')
               .replace(/```show-widget[\s\S]*$/, '')
@@ -455,8 +518,8 @@ export function StreamingMessage({
           return stripped ? <MessageResponse>{stripped}</MessageResponse> : null;
         })()}
 
-        {/* Loading indicator when no content yet — evolves over time */}
-        {isStreaming && !content && toolUses.length === 0 && (
+        {/* Loading indicator when no content yet and no thinking content — evolves over time */}
+        {isStreaming && !content && toolUses.length === 0 && !thinkingContent && (
           <div className="py-2">
             <ThinkingPhaseLabel />
           </div>

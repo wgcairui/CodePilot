@@ -2,7 +2,7 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
-CodePilot — Claude Code 的桌面 GUI 客户端，基于 Electron + Next.js。
+CodePilot — 多模型 AI Agent 桌面客户端，基于 Electron + Next.js。
 
 > 架构细节见 [ARCHITECTURE.md](./ARCHITECTURE.md)，本文件只包含规则和流程。
 

@@ -5,7 +5,7 @@
  */
 export const siteConfig = {
   name: 'CodePilot',
-  description: 'Desktop workspace for Claude Code — conversations, providers, MCP, and project context in one place.',
+  description: 'A multi-model AI agent desktop client — connect any AI provider, extend with MCP & skills, control from your phone.',
   url: 'https://www.codepilot.sh',
 
   // Canonical repository

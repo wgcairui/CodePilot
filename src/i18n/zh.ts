@@ -1267,7 +1267,7 @@ const zh: Record<TranslationKey, string> = {
 
   // Setup: Welcome card
   'setup.welcome.title': '欢迎',
-  'setup.welcome.description': 'CodePilot 是 Claude Code 的桌面 GUI 客户端。它连接到 Claude Code CLI，提供 AI 辅助编码的可视化界面。',
+  'setup.welcome.description': 'CodePilot 是多模型 AI Agent 桌面客户端。连接任意 AI 服务商，通过 MCP 和 Skills 扩展能力，让你的助理学会你的工作方式。',
 
   // Setup: Claude Code card
   'setup.claude.title': 'Claude Code CLI',

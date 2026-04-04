@@ -101,12 +101,13 @@ Gemini 图片生成 API，供设计 Agent 使用。
 - **认证**：API 密钥
 - **说明**：这是专门用于图片生成的服务商，不用于文本对话
 
-### Custom API（OpenAI 兼容）
+### Ollama（本地模型）
 
-任何兼容 OpenAI Chat Completions API 的端点。
+通过 Ollama 运行本地模型。Ollama 提供了 Anthropic 兼容的 API，CodePilot 可以直接连接。
 
-- **认证**：API 密钥 + 基础 URL
-- **用途**：接入本地模型（Ollama、LM Studio、vLLM）或其他第三方代理
+- **认证**：无需 API 密钥（系统自动处理）
+- **前提**：需要先安装并启动 Ollama
+- **详细配置**：参见下方 [Ollama 配置指南](#ollama-配置指南)
 
 ### LiteLLM
 
@@ -155,4 +156,41 @@ Gemini 图片生成 API，供设计 Agent 使用。
 
 ### 如何使用本地模型
 
-选择 **Custom API（OpenAI 兼容）** 类型，基础 URL 填写本地服务地址（如 `http://localhost:11434/v1`）。API 密钥可填任意值（本地服务通常不校验）。
+推荐使用 **Ollama** 预设，参见下方 [Ollama 配置指南](#ollama-配置指南)。也可以选择 **LiteLLM** 接入其他本地推理框架（如 vLLM、LM Studio）。
+
+---
+
+## Ollama 配置指南
+
+通过 Ollama 可以在本地运行开源模型，无需 API 密钥，完全免费。以下以 `gemma4:e4b` 为例演示完整配置流程。
+
+### 第一步：安装 Ollama 并运行模型
+
+```bash
+# 安装 Ollama
+curl -fsSL https://ollama.com/install.sh | sh
+
+# 拉取并运行模型（会自动启动 Ollama 服务）
+ollama run gemma4:e4b
+```
+
+运行后模型会进入交互对话模式，确认能正常回复后按 `Ctrl+D` 退出即可。Ollama 服务会在后台继续运行。
+
+> **模型名称很重要**：在 CodePilot 中填写的模型名称必须与 `ollama list` 显示的名称**完全一致**（包括冒号后的标签部分）。例如 `gemma4:e4b`，不能只写 `gemma4`。
+
+更多模型和用法参见 [Ollama 官方文档](https://docs.ollama.com/)。
+
+### 第二步：在 CodePilot 中添加 Ollama
+
+1. 打开 **设置 > 服务商**
+2. 在服务商列表底部找到 **Ollama**，点击 **+ 连接**
+3. 配置以下信息：
+   - **基础 URL**：保持默认 `http://localhost:11434`（如果 Ollama 运行在其他端口或远程机器上，修改为对应地址）
+   - **模型名称**：填写 `gemma4:e4b`（必须与 `ollama list` 中的名称完全一致）
+4. 点击 **保存**
+
+### 第三步：开始对话
+
+1. 新建对话
+2. 在对话顶部的服务商选择器中切换到 **Ollama**
+3. 发送消息，模型会在本地运行推理

@@ -1270,7 +1270,7 @@ const en = {
 
   // Setup: Welcome card
   'setup.welcome.title': 'Welcome',
-  'setup.welcome.description': 'CodePilot is a desktop GUI for Claude Code. It connects to the Claude Code CLI to provide a visual interface for AI-assisted coding.',
+  'setup.welcome.description': 'CodePilot is a multi-model AI agent desktop client. Connect any AI provider, extend with MCP & skills, and let your assistant learn your workflow.',
 
   // Setup: Claude Code card
   'setup.claude.title': 'Claude Code CLI',

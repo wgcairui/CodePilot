@@ -430,6 +430,9 @@ async function collectStreamResponse(
   const reader = stream.getReader();
   const contentBlocks: MessageContentBlock[] = [];
   let currentText = '';
+  let thinkingText = '';
+  /** Tracks whether non-thinking content arrived since last thinking delta (for phase separation) */
+  let thinkingPhaseEnded = false;
   let tokenUsage: TokenUsage | null = null;
   let hasError = false;
   let errorMessage = '';
@@ -449,9 +452,18 @@ async function collectStreamResponse(
             const event: SSEEvent = JSON.parse(line.slice(6));
             if (event.type === 'permission_request' || event.type === 'tool_output') {
               // Skip permission_request and tool_output events - not saved as message content
+            } else if (event.type === 'thinking') {
+              // Accumulate thinking content with phase separation (--- between phases)
+              if (thinkingPhaseEnded) {
+                if (thinkingText) thinkingText += '\n\n---\n\n';
+                thinkingPhaseEnded = false;
+              }
+              thinkingText += event.data;
             } else if (event.type === 'text') {
               currentText += event.data;
+              if (thinkingText) thinkingPhaseEnded = true;
             } else if (event.type === 'tool_use') {
+              if (thinkingText) thinkingPhaseEnded = true;
               // Flush any accumulated text before the tool use block
               if (currentText.trim()) {
                 contentBlocks.push({ type: 'text', text: currentText });
@@ -580,21 +592,26 @@ async function collectStreamResponse(
       contentBlocks.push({ type: 'text', text: currentText });
     }
 
+    // Prepend thinking block if accumulated during stream
+    if (thinkingText.trim()) {
+      contentBlocks.unshift({ type: 'thinking', thinking: thinkingText.trim() });
+    }
+
     if (contentBlocks.length > 0) {
       // If the message is text-only (no tool calls), store as plain text
       // for backward compatibility with existing message rendering.
       // Strip soft-heartbeat marker from text blocks before persisting (both paths)
       const heartbeatMarkerRe = /\s*<!--\s*heartbeat-done\s*-->\s*/g;
       const cleanedBlocks = contentBlocks.map(b =>
-        b.type === 'text' ? { ...b, text: b.text.replace(heartbeatMarkerRe, '') } : b
+        b.type === 'text' && 'text' in b ? { ...b, text: (b.text as string).replace(heartbeatMarkerRe, '') } : b
       );
 
-      // If it contains tool calls, store as structured JSON.
-      const hasToolBlocks = cleanedBlocks.some(
-        (b) => b.type === 'tool_use' || b.type === 'tool_result'
+      // If it contains tool calls or thinking blocks, store as structured JSON.
+      const hasStructuredBlocks = cleanedBlocks.some(
+        (b) => b.type === 'tool_use' || b.type === 'tool_result' || b.type === 'thinking'
       );
 
-      const content = hasToolBlocks
+      const content = hasStructuredBlocks
         ? JSON.stringify(cleanedBlocks)
         : cleanedBlocks
             .filter((b): b is Extract<MessageContentBlock, { type: 'text' }> => b.type === 'text')
@@ -615,19 +632,22 @@ async function collectStreamResponse(
   } catch (e) {
     hasError = true;
     errorMessage = e instanceof Error ? e.message : 'Stream reading error';
-    // Stream reading error - best effort save
+    // Stream reading error - best effort save (same structured-block handling as happy path)
     if (currentText.trim()) {
       contentBlocks.push({ type: 'text', text: currentText });
+    }
+    if (thinkingText.trim()) {
+      contentBlocks.unshift({ type: 'thinking', thinking: thinkingText.trim() });
     }
     if (contentBlocks.length > 0) {
       const hbRe = /\s*<!--\s*heartbeat-done\s*-->\s*/g;
       const errCleanedBlocks = contentBlocks.map(b =>
-        b.type === 'text' ? { ...b, text: b.text.replace(hbRe, '') } : b
+        b.type === 'text' && 'text' in b ? { ...b, text: (b.text as string).replace(hbRe, '') } : b
       );
-      const hasToolBlocks = errCleanedBlocks.some(
-        (b) => b.type === 'tool_use' || b.type === 'tool_result'
+      const hasStructuredBlocks = errCleanedBlocks.some(
+        (b) => b.type === 'tool_use' || b.type === 'tool_result' || b.type === 'thinking'
       );
-      const content = hasToolBlocks
+      const content = hasStructuredBlocks
         ? JSON.stringify(errCleanedBlocks)
         : errCleanedBlocks
             .filter((b): b is Extract<MessageContentBlock, { type: 'text' }> => b.type === 'text')

@@ -38,6 +38,11 @@ interface ActiveStream {
   pendingTimers: Set<ReturnType<typeof setTimeout>>;
   // Mutable accumulators (snapshot gets new object refs on each emit)
   accumulatedText: string;
+  accumulatedThinking: string;
+  /** All thinking blocks concatenated (preserved for finalMessageContent) */
+  fullThinking: string;
+  /** Tracks whether non-thinking content has arrived since last thinking delta */
+  thinkingPhaseEnded: boolean;
   toolUsesArray: ToolUseInfo[];
   toolResultsArray: ToolResultInfo[];
   toolOutputAccumulated: string;
@@ -107,6 +112,7 @@ function buildSnapshot(stream: ActiveStream): SessionStreamSnapshot {
     sessionId: stream.sessionId,
     phase: stream.snapshot.phase,
     streamingContent: stream.accumulatedText,
+    streamingThinkingContent: stream.accumulatedThinking,
     toolUses: [...stream.toolUsesArray],
     toolResults: [...stream.toolResultsArray],
     streamingToolOutput: stream.toolOutputAccumulated,
@@ -192,6 +198,7 @@ export function startStream(params: StartStreamParams): void {
       sessionId: params.sessionId,
       phase: 'active',
       streamingContent: '',
+      streamingThinkingContent: '',
       toolUses: [],
       toolResults: [],
       streamingToolOutput: '',
@@ -209,6 +216,9 @@ export function startStream(params: StartStreamParams): void {
     gcTimer: null,
     pendingTimers: new Set(),
     accumulatedText: '',
+    accumulatedThinking: '',
+    fullThinking: '',
+    thinkingPhaseEnded: false,
     toolUsesArray: [],
     toolResultsArray: [],
     toolOutputAccumulated: '',
@@ -244,6 +254,35 @@ async function runStream(stream: ActiveStream, params: StartStreamParams): Promi
     effectiveContent = `${notices}\n\n---\n\n${params.content}`;
   }
 
+  // Adaptive text emit throttle — avoids excessive React re-renders during fast streaming.
+  // Defined before try/catch so flushTextThrottle is accessible in the error path.
+  const TEXT_THROTTLE_MS = 100;
+  let textEmitTimer: ReturnType<typeof setTimeout> | null = null;
+  let textDirty = false;
+
+  const emitTextUpdate = () => {
+    textDirty = false;
+    emit(stream, 'snapshot-updated');
+  };
+
+  const throttledTextEmit = () => {
+    textDirty = true;
+    if (!textEmitTimer) {
+      textEmitTimer = setTimeout(() => {
+        textEmitTimer = null;
+        if (textDirty) emitTextUpdate();
+      }, TEXT_THROTTLE_MS);
+    }
+  };
+
+  const flushTextThrottle = () => {
+    if (textEmitTimer) {
+      clearTimeout(textEmitTimer);
+      textEmitTimer = null;
+    }
+    if (textDirty) emitTextUpdate();
+  };
+
   try {
     const response = await fetch('/api/chat', {
       method: 'POST',
@@ -277,10 +316,29 @@ async function runStream(stream: ActiveStream, params: StartStreamParams): Promi
       onText: (acc) => {
         markActive();
         stream.accumulatedText = acc;
+        stream.thinkingPhaseEnded = true;
+        throttledTextEmit();
+      },
+      onThinking: (delta) => {
+        markActive();
+        // If non-thinking content has arrived since last thinking delta,
+        // this is a new thinking phase (e.g. after a tool_use round-trip).
+        // Reset the live accumulator so the UI shows only the current phase.
+        if (stream.thinkingPhaseEnded) {
+          // Save previous thinking to full history before resetting
+          if (stream.accumulatedThinking) {
+            stream.fullThinking += (stream.fullThinking ? '\n\n---\n\n' : '') + stream.accumulatedThinking;
+          }
+          stream.accumulatedThinking = '';
+          stream.thinkingPhaseEnded = false;
+        }
+        stream.accumulatedThinking += delta;
         emit(stream, 'snapshot-updated');
       },
       onToolUse: (tool) => {
         markActive();
+        flushTextThrottle(); // Ensure text is up-to-date before tool events
+        stream.thinkingPhaseEnded = true;
         stream.toolOutputAccumulated = '';
         if (!stream.toolUsesArray.some(t => t.id === tool.id)) {
           stream.toolUsesArray = [...stream.toolUsesArray, tool];
@@ -388,6 +446,9 @@ async function runStream(stream: ActiveStream, params: StartStreamParams): Promi
       },
     });
 
+    // Flush any pending throttled text update before building final content
+    flushTextThrottle();
+
     // Stream completed successfully — build final message content
     const accumulated = result.accumulated;
     const finalToolUses = stream.toolUsesArray;
@@ -395,8 +456,16 @@ async function runStream(stream: ActiveStream, params: StartStreamParams): Promi
     const hasTools = finalToolUses.length > 0 || finalToolResults.length > 0;
 
     let messageContent = accumulated.trim();
-    if (hasTools && messageContent) {
+    // Combine all thinking phases for persistence
+    const allThinking = [stream.fullThinking, stream.accumulatedThinking]
+      .filter(s => s.trim()).join('\n\n---\n\n');
+    const hasThinking = allThinking.length > 0;
+    if ((hasTools || hasThinking) && (messageContent || hasThinking)) {
       const contentBlocks: Array<Record<string, unknown>> = [];
+      // Include thinking block if present — rendered as collapsed Reasoning in MessageItem
+      if (hasThinking) {
+        contentBlocks.push({ type: 'thinking', thinking: allThinking });
+      }
       if (accumulated.trim()) {
         contentBlocks.push({ type: 'text', text: accumulated.trim() });
       }
@@ -408,6 +477,7 @@ async function runStream(stream: ActiveStream, params: StartStreamParams): Promi
             type: 'tool_result',
             tool_use_id: tr.tool_use_id,
             content: tr.content,
+            ...(tr.is_error ? { is_error: true } : {}),
             ...(tr.media && tr.media.length > 0 ? { media: tr.media } : {}),
           });
         }
@@ -427,6 +497,9 @@ async function runStream(stream: ActiveStream, params: StartStreamParams): Promi
       permissionResolved: null,
     };
     stream.accumulatedText = '';
+    stream.accumulatedThinking = '';
+    stream.fullThinking = '';
+    stream.thinkingPhaseEnded = false;
     stream.toolUsesArray = [];
     stream.toolResultsArray = [];
     stream.toolOutputAccumulated = '';
@@ -439,13 +512,28 @@ async function runStream(stream: ActiveStream, params: StartStreamParams): Promi
     window.dispatchEvent(new CustomEvent('refresh-file-tree'));
 
   } catch (error) {
+    flushTextThrottle();
     cleanupTimers(stream);
+
+    // Helper: build finalMessageContent preserving any accumulated thinking.
+    // On error/stop branches we previously only serialized accumulatedText,
+    // silently dropping reasoning blocks that the user had already seen.
+    const buildFinalContent = (textContent: string | null): string | null => {
+      const allThinking = [stream.fullThinking, stream.accumulatedThinking]
+        .filter(s => s.trim()).join('\n\n---\n\n');
+      if (!allThinking) return textContent;
+      // Wrap as content-block JSON so MessageItem can render the thinking block
+      const blocks: Array<Record<string, unknown>> = [];
+      blocks.push({ type: 'thinking', thinking: allThinking });
+      if (textContent) blocks.push({ type: 'text', text: textContent });
+      return JSON.stringify(blocks);
+    };
 
     if (error instanceof DOMException && error.name === 'AbortError') {
       if (stream.isIdleTimeout) {
         // Idle timeout
         const idleSecs = Math.round(STREAM_IDLE_TIMEOUT_MS / 1000);
-        const errContent = stream.accumulatedText.trim()
+        const textPart = stream.accumulatedText.trim()
           ? stream.accumulatedText.trim() + `\n\n**Error:** Stream idle timeout — no response for ${idleSecs}s. The connection may have dropped.`
           : `**Error:** Stream idle timeout — no response for ${idleSecs}s. The connection may have dropped.`;
 
@@ -454,12 +542,14 @@ async function runStream(stream: ActiveStream, params: StartStreamParams): Promi
           phase: 'error',
           completedAt: Date.now(),
           error: `Stream idle timeout (${idleSecs}s)`,
-          finalMessageContent: errContent,
+          finalMessageContent: buildFinalContent(textPart),
           statusText: undefined,
           pendingPermission: null,
           permissionResolved: null,
         };
         stream.accumulatedText = '';
+        stream.accumulatedThinking = '';
+        stream.fullThinking = '';
         stream.toolUsesArray = [];
         stream.toolResultsArray = [];
         stream.toolOutputAccumulated = '';
@@ -474,7 +564,7 @@ async function runStream(stream: ActiveStream, params: StartStreamParams): Promi
       } else if (stream.toolTimeoutInfo) {
         // Tool timeout — auto-retry
         const timeoutInfo = stream.toolTimeoutInfo;
-        const partialContent = stream.accumulatedText.trim()
+        const textPart = stream.accumulatedText.trim()
           ? stream.accumulatedText.trim() + `\n\n*(tool ${timeoutInfo.toolName} timed out after ${timeoutInfo.elapsedSeconds}s)*`
           : null;
 
@@ -482,12 +572,14 @@ async function runStream(stream: ActiveStream, params: StartStreamParams): Promi
           ...buildSnapshot(stream),
           phase: 'stopped',
           completedAt: Date.now(),
-          finalMessageContent: partialContent,
+          finalMessageContent: buildFinalContent(textPart),
           statusText: undefined,
           pendingPermission: null,
           permissionResolved: null,
         };
         stream.accumulatedText = '';
+        stream.accumulatedThinking = '';
+        stream.fullThinking = '';
         stream.toolUsesArray = [];
         stream.toolResultsArray = [];
         stream.toolOutputAccumulated = '';
@@ -506,7 +598,7 @@ async function runStream(stream: ActiveStream, params: StartStreamParams): Promi
         }
       } else {
         // User manually stopped — add partial content with "(generation stopped)"
-        const partialContent = stream.accumulatedText.trim()
+        const textPart = stream.accumulatedText.trim()
           ? stream.accumulatedText.trim() + '\n\n*(generation stopped)*'
           : null;
 
@@ -514,12 +606,14 @@ async function runStream(stream: ActiveStream, params: StartStreamParams): Promi
           ...buildSnapshot(stream),
           phase: 'stopped',
           completedAt: Date.now(),
-          finalMessageContent: partialContent,
+          finalMessageContent: buildFinalContent(textPart),
           statusText: undefined,
           pendingPermission: null,
           permissionResolved: null,
         };
         stream.accumulatedText = '';
+        stream.accumulatedThinking = '';
+        stream.fullThinking = '';
         stream.toolUsesArray = [];
         stream.toolResultsArray = [];
         stream.toolOutputAccumulated = '';
@@ -534,12 +628,14 @@ async function runStream(stream: ActiveStream, params: StartStreamParams): Promi
         phase: 'error',
         completedAt: Date.now(),
         error: errMsg,
-        finalMessageContent: `**Error:** ${errMsg}`,
+        finalMessageContent: buildFinalContent(`**Error:** ${errMsg}`),
         statusText: undefined,
         pendingPermission: null,
         permissionResolved: null,
       };
       stream.accumulatedText = '';
+      stream.accumulatedThinking = '';
+      stream.fullThinking = '';
       stream.toolUsesArray = [];
       stream.toolResultsArray = [];
       stream.toolOutputAccumulated = '';

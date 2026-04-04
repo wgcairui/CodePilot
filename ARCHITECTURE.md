@@ -1,6 +1,6 @@
 # ARCHITECTURE.md
 
-CodePilot 是 Claude Code 的桌面 GUI 客户端。Electron 40 做外壳，Next.js 16 (App Router) 做前端和 API 层，better-sqlite3 做本地持久化，通过 Claude Agent SDK 与 Claude 交互。
+CodePilot 是多模型 AI Agent 桌面客户端。Electron 40 做外壳，Next.js 16 (App Router) 做前端和 API 层，better-sqlite3 做本地持久化，通过 Claude Agent SDK 与 AI 服务商交互。
 
 ## 目录结构
 

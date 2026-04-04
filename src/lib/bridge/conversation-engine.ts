@@ -297,6 +297,18 @@ async function consumeStream(
         }
 
         switch (event.type) {
+          case 'thinking': {
+            // Accumulate thinking deltas into a thinking content block
+            const delta = event.data;
+            const lastBlock = contentBlocks[contentBlocks.length - 1];
+            if (lastBlock && lastBlock.type === 'thinking' && 'thinking' in lastBlock) {
+              (lastBlock as { type: 'thinking'; thinking: string }).thinking += delta;
+            } else {
+              contentBlocks.push({ type: 'thinking', thinking: delta });
+            }
+            break;
+          }
+
           case 'text':
             currentText += event.data;
             if (onPartialText) {
@@ -432,10 +444,10 @@ async function consumeStream(
 
     // Save assistant message
     if (contentBlocks.length > 0) {
-      const hasToolBlocks = contentBlocks.some(
-        (b) => b.type === 'tool_use' || b.type === 'tool_result'
+      const hasStructuredBlocks = contentBlocks.some(
+        (b) => b.type === 'tool_use' || b.type === 'tool_result' || b.type === 'thinking'
       );
-      const content = hasToolBlocks
+      const content = hasStructuredBlocks
         ? JSON.stringify(contentBlocks)
         : contentBlocks
             .filter((b): b is Extract<MessageContentBlock, { type: 'text' }> => b.type === 'text')
@@ -448,12 +460,19 @@ async function consumeStream(
       }
     }
 
-    // Extract text-only response for IM delivery
-    const responseText = contentBlocks
+    // Extract response for IM delivery — include text blocks, and if none exist
+    // but thinking blocks are present, include a summary so thinking-only turns
+    // are not silently dropped.
+    const textParts = contentBlocks
       .filter((b): b is Extract<MessageContentBlock, { type: 'text' }> => b.type === 'text')
-      .map((b) => b.text)
-      .join('')
-      .trim();
+      .map((b) => b.text);
+    if (textParts.length === 0) {
+      const thinkingBlocks = contentBlocks.filter((b) => b.type === 'thinking' && 'thinking' in b);
+      if (thinkingBlocks.length > 0) {
+        textParts.push('_(reasoning completed, no text output)_');
+      }
+    }
+    const responseText = textParts.join('').trim();
 
     return {
       responseText,
@@ -469,10 +488,10 @@ async function consumeStream(
       contentBlocks.push({ type: 'text', text: currentText });
     }
     if (contentBlocks.length > 0) {
-      const hasToolBlocks = contentBlocks.some(
-        (b) => b.type === 'tool_use' || b.type === 'tool_result'
+      const hasStructuredBlocks = contentBlocks.some(
+        (b) => b.type === 'tool_use' || b.type === 'tool_result' || b.type === 'thinking'
       );
-      const content = hasToolBlocks
+      const content = hasStructuredBlocks
         ? JSON.stringify(contentBlocks)
         : contentBlocks
             .filter((b): b is Extract<MessageContentBlock, { type: 'text' }> => b.type === 'text')
@@ -487,8 +506,16 @@ async function consumeStream(
     const isAbort = e instanceof DOMException && e.name === 'AbortError'
       || e instanceof Error && e.name === 'AbortError';
 
+    // Build error responseText — include indicator if thinking blocks were present
+    const errorTextParts = contentBlocks
+      .filter((b): b is Extract<MessageContentBlock, { type: 'text' }> => b.type === 'text')
+      .map((b) => b.text);
+    if (errorTextParts.length === 0 && contentBlocks.some((b) => b.type === 'thinking')) {
+      errorTextParts.push('_(reasoning completed, no text output)_');
+    }
+
     return {
-      responseText: '',
+      responseText: errorTextParts.join('').trim(),
       tokenUsage,
       hasError: true,
       errorMessage: isAbort ? 'Task stopped by user' : (e instanceof Error ? e.message : 'Stream consumption error'),

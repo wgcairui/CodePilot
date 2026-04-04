@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, createElement } from 'react';
+import React, { useState, createElement } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import type { Icon } from "@phosphor-icons/react";
 import {
@@ -13,9 +13,18 @@ import {
   CheckCircle,
   XCircle,
   CaretRight,
+  Brain,
   Image as ImageIcon,
 } from "@phosphor-icons/react";
 import { cn } from '@/lib/utils';
+import { Shimmer } from '@/components/ai-elements/shimmer';
+import { useStickToBottomContext } from 'use-stick-to-bottom';
+import { Streamdown } from 'streamdown';
+import { cjk } from '@streamdown/cjk';
+import { math } from '@streamdown/math';
+import { mermaid } from '@streamdown/mermaid';
+
+const thinkingPlugins = { cjk, math, mermaid };
 import type { MediaBlock } from '@/types';
 
 // ---------------------------------------------------------------------------
@@ -35,75 +44,28 @@ interface ToolActionsGroupProps {
   tools: ToolAction[];
   isStreaming?: boolean;
   streamingToolOutput?: string;
+  /** When true, skip the collapsible header and render the tool list directly */
+  flat?: boolean;
+  /** Thinking/reasoning content — rendered as the first expandable item inside the group */
+  thinkingContent?: string;
 }
 
 // ---------------------------------------------------------------------------
-// Tool categorisation
+// Tool Registry — extensible per-type rendering
 // ---------------------------------------------------------------------------
 
-type ToolCategory = 'read' | 'write' | 'bash' | 'search' | 'other';
-
-function getToolCategory(name: string): ToolCategory {
-  const lower = name.toLowerCase();
-  if (lower === 'read' || lower === 'readfile' || lower === 'read_file') return 'read';
-  if (
-    lower === 'write' || lower === 'edit' || lower === 'writefile' ||
-    lower === 'write_file' || lower === 'create_file' || lower === 'createfile' ||
-    lower === 'notebookedit' || lower === 'notebook_edit'
-  ) return 'write';
-  if (
-    lower === 'bash' || lower === 'execute' || lower === 'run' ||
-    lower === 'shell' || lower === 'execute_command'
-  ) return 'bash';
-  if (
-    lower === 'search' || lower === 'glob' || lower === 'grep' ||
-    lower === 'find_files' || lower === 'search_files' ||
-    lower === 'websearch' || lower === 'web_search'
-  ) return 'search';
-  return 'other';
+interface ToolRendererDef {
+  match: (name: string) => boolean;
+  icon: Icon;
+  label: string;
+  getSummary: (input: unknown, name?: string) => string;
+  /** Render inline detail when tool row is hovered/expanded (optional) */
+  renderDetail?: (tool: ToolAction, streamingOutput?: string) => React.ReactNode;
 }
-
-function getToolIcon(category: ToolCategory): Icon {
-  switch (category) {
-    case 'read':   return File;
-    case 'write':  return NotePencil;
-    case 'bash':   return Terminal;
-    case 'search': return MagnifyingGlass;
-    case 'other':  return Wrench;
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Summary helpers
-// ---------------------------------------------------------------------------
 
 function extractFilename(path: string): string {
   const parts = path.split('/');
   return parts[parts.length - 1] || path;
-}
-
-function getToolSummary(name: string, input: unknown, category: ToolCategory): string {
-  const inp = input as Record<string, unknown> | undefined;
-  if (!inp) return name;
-
-  switch (category) {
-    case 'read':
-    case 'write': {
-      const path = (inp.file_path || inp.path || inp.filePath || '') as string;
-      return path ? extractFilename(path) : name;
-    }
-    case 'bash': {
-      const cmd = (inp.command || inp.cmd || '') as string;
-      if (cmd) return cmd.length > 60 ? cmd.slice(0, 57) + '...' : cmd;
-      return name;
-    }
-    case 'search': {
-      const pattern = (inp.pattern || inp.query || inp.glob || '') as string;
-      return pattern ? `"${pattern.length > 50 ? pattern.slice(0, 47) + '...' : pattern}"` : name;
-    }
-    default:
-      return name;
-  }
 }
 
 function getFilePath(input: unknown): string {
@@ -115,6 +77,101 @@ function getFilePath(input: unknown): string {
 function truncatePath(path: string, maxLen = 50): string {
   if (path.length <= maxLen) return path;
   return '...' + path.slice(path.length - maxLen + 3);
+}
+
+const TOOL_REGISTRY: ToolRendererDef[] = [
+  {
+    match: (n) => ['bash', 'execute', 'run', 'shell', 'execute_command'].includes(n.toLowerCase()),
+    icon: Terminal,
+    label: '',
+    getSummary: (input) => {
+      const cmd = ((input as Record<string, unknown>)?.command || (input as Record<string, unknown>)?.cmd || '') as string;
+      return cmd ? (cmd.length > 60 ? cmd.slice(0, 57) + '...' : cmd) : 'bash';
+    },
+    renderDetail: (tool, streamingOutput) => {
+      const cmd = ((tool.input as Record<string, unknown>)?.command || (tool.input as Record<string, unknown>)?.cmd || '') as string;
+      const isRunning = tool.result === undefined;
+      // While running: show command + last 5 lines of output (rolling window)
+      // When done: show command + full result (collapsible)
+      const outputText = isRunning ? streamingOutput : tool.result;
+      const displayLines = (() => {
+        if (!outputText) return null;
+        if (isRunning) {
+          // Rolling window: only last 5 lines while streaming
+          const lines = outputText.split('\n');
+          return lines.slice(-5).join('\n');
+        }
+        // Completed: show full output, truncated to 20 lines with indicator
+        const lines = outputText.split('\n');
+        if (lines.length > 20) {
+          return lines.slice(0, 20).join('\n') + `\n… +${lines.length - 20} lines`;
+        }
+        return outputText;
+      })();
+
+      return (
+        <div className="mt-1 rounded bg-muted/40 px-2 py-1.5 font-mono text-[11px] text-muted-foreground/80 max-h-[140px] overflow-auto whitespace-pre-wrap break-all">
+          {cmd && <div className="text-foreground/70">$ {cmd}</div>}
+          {displayLines && (
+            <div className={cn("mt-1", isRunning ? "text-muted-foreground/50" : "text-muted-foreground/60")}>
+              {displayLines}
+            </div>
+          )}
+        </div>
+      );
+    },
+  },
+  {
+    match: (n) => ['write', 'edit', 'writefile', 'write_file', 'create_file', 'createfile', 'notebookedit', 'notebook_edit'].includes(n.toLowerCase()),
+    icon: NotePencil,
+    label: 'Edit',
+    getSummary: (input) => {
+      const path = getFilePath(input);
+      return path ? extractFilename(path) : 'file';
+    },
+  },
+  {
+    match: (n) => ['read', 'readfile', 'read_file'].includes(n.toLowerCase()),
+    icon: File,
+    label: 'Read',
+    getSummary: (input) => {
+      const path = getFilePath(input);
+      return path ? extractFilename(path) : 'file';
+    },
+  },
+  {
+    match: (n) => ['search', 'glob', 'grep', 'find_files', 'search_files', 'websearch', 'web_search'].includes(n.toLowerCase()),
+    icon: MagnifyingGlass,
+    label: 'Search',
+    getSummary: (input) => {
+      const inp = input as Record<string, unknown> | undefined;
+      const pattern = (inp?.pattern || inp?.query || inp?.glob || '') as string;
+      return pattern ? `"${pattern.length > 50 ? pattern.slice(0, 47) + '...' : pattern}"` : 'search';
+    },
+  },
+  {
+    // Fallback — must be last. Shows the raw tool name so unregistered tools
+    // (TodoWrite, MCP tools, plugin tools) remain identifiable.
+    match: () => true,
+    icon: Wrench,
+    label: '',
+    getSummary: (input, name?: string) => {
+      const prefix = name || '';
+      if (!input || typeof input !== 'object') return prefix;
+      const str = JSON.stringify(input);
+      const detail = str.length > 50 ? str.slice(0, 47) + '...' : str;
+      return prefix ? `${prefix} ${detail}` : detail;
+    },
+  },
+];
+
+function getRenderer(name: string): ToolRendererDef {
+  return TOOL_REGISTRY.find((r) => r.match(name)) || TOOL_REGISTRY[TOOL_REGISTRY.length - 1];
+}
+
+/** Register a custom tool renderer. It takes priority over built-in ones. */
+export function registerToolRenderer(def: ToolRendererDef): void {
+  TOOL_REGISTRY.unshift(def);
 }
 
 // ---------------------------------------------------------------------------
@@ -129,54 +186,246 @@ function getStatus(tool: ToolAction): ToolStatus {
 }
 
 function StatusDot({ status }: { status: ToolStatus }) {
-  switch (status) {
-    case 'running':
-      return (
-        <SpinnerGap size={14} className="shrink-0 animate-spin text-muted-foreground/50" />
-      );
-    case 'success':
-      return <CheckCircle size={14} className="shrink-0 text-green-500" />;
-    case 'error':
-      return <XCircle size={14} className="shrink-0 text-red-500" />;
+  return (
+    <AnimatePresence mode="wait">
+      {status === 'running' && (
+        <motion.span
+          key="running"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.15 }}
+          className="inline-flex"
+        >
+          <SpinnerGap size={14} className="shrink-0 animate-spin text-muted-foreground/50" />
+        </motion.span>
+      )}
+      {status === 'success' && (
+        <motion.span
+          key="success"
+          initial={{ scale: 0.5, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 20 }}
+          className="inline-flex"
+        >
+          <CheckCircle size={14} className="shrink-0 text-green-500" />
+        </motion.span>
+      )}
+      {status === 'error' && (
+        <motion.span
+          key="error"
+          initial={{ scale: 0.5, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          transition={{ type: 'spring', stiffness: 400, damping: 20 }}
+          className="inline-flex"
+        >
+          <XCircle size={14} className="shrink-0 text-red-500" />
+        </motion.span>
+      )}
+    </AnimatePresence>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Context tool grouping — auto-group 3+ consecutive read/search tools
+// ---------------------------------------------------------------------------
+
+const CONTEXT_TOOLS = new Set([
+  'read', 'readfile', 'read_file',
+  'glob', 'grep',
+  'ls', 'list', 'list_files',
+  'search', 'find_files', 'search_files',
+]);
+
+function isContextTool(name: string): boolean {
+  return CONTEXT_TOOLS.has(name.toLowerCase());
+}
+
+type Segment =
+  | { kind: 'context'; tools: ToolAction[] }
+  | { kind: 'single'; tool: ToolAction };
+
+function computeSegments(tools: ToolAction[]): Segment[] {
+  const segments: Segment[] = [];
+  let contextBuffer: ToolAction[] = [];
+
+  const flushContext = () => {
+    if (contextBuffer.length >= 3) {
+      segments.push({ kind: 'context', tools: contextBuffer });
+    } else {
+      for (const t of contextBuffer) {
+        segments.push({ kind: 'single', tool: t });
+      }
+    }
+    contextBuffer = [];
+  };
+
+  for (const tool of tools) {
+    if (isContextTool(tool.name)) {
+      contextBuffer.push(tool);
+    } else {
+      flushContext();
+      segments.push({ kind: 'single', tool });
+    }
   }
+  flushContext();
+  return segments;
+}
+
+function ContextGroup({ tools }: { tools: ToolAction[] }) {
+  const [expanded, setExpanded] = useState(false);
+  const hasRunning = tools.some((t) => t.result === undefined);
+  const hasError = tools.some((t) => t.isError);
+  const groupStatus: ToolStatus = hasRunning ? 'running' : hasError ? 'error' : 'success';
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => setExpanded((prev) => !prev)}
+        className="flex w-full items-center gap-2 px-2 py-1 min-h-[28px] text-xs hover:bg-muted/30 rounded-sm transition-colors"
+      >
+        <MagnifyingGlass size={14} className="shrink-0 text-muted-foreground" />
+        <CaretRight
+          size={10}
+          className={cn(
+            "shrink-0 text-muted-foreground/60 transition-transform duration-200",
+            expanded && "rotate-90"
+          )}
+        />
+        <span className="font-medium text-muted-foreground">
+          {hasRunning ? `Gathering context (${tools.length})` : `Gathered context (${tools.length} files)`}
+        </span>
+        <span className="ml-auto">
+          <StatusDot status={groupStatus} />
+        </span>
+      </button>
+      <AnimatePresence initial={false}>
+        {expanded && (
+          <motion.div
+            initial={{ height: 0 }}
+            animate={{ height: 'auto' }}
+            exit={{ height: 0 }}
+            transition={{ duration: 0.15, ease: 'easeOut' }}
+            style={{ overflow: 'hidden' }}
+          >
+            <div className="ml-6 border-l-2 border-border/30 pl-2">
+              {tools.map((tool, i) => (
+                <ToolActionRow key={tool.id || `ctx-${i}`} tool={tool} />
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Thinking row — same style as tool rows, Brain icon → caret on hover
+// ---------------------------------------------------------------------------
+
+function ThinkingRow({ content, isStreaming }: { content: string; isStreaming?: boolean }) {
+  // Default open during streaming, collapsed in history
+  const [expanded, setExpanded] = useState(!!isStreaming);
+  const [hovered, setHovered] = useState(false);
+  const { stopScroll } = useStickToBottomContext();
+
+  // Extract summary from first **bold** or # heading
+  const summary = (() => {
+    const boldMatch = content.match(/\*\*(.+?)\*\*/);
+    if (boldMatch) return boldMatch[1];
+    const headingMatch = content.match(/^#{1,4}\s+(.+)$/m);
+    if (headingMatch) return headingMatch[1];
+    return isStreaming ? 'Thinking...' : 'Thought';
+  })();
+
+  return (
+    <div>
+      <button
+        type="button"
+        onClick={() => {
+          const willExpand = !expanded;
+          setExpanded(willExpand);
+          // Detach from auto-scroll when expanding to prevent page jump
+          if (willExpand) stopScroll();
+        }}
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        className="flex items-center gap-2 px-2 py-1 min-h-[28px] text-xs hover:bg-muted/30 rounded-sm transition-colors w-full"
+      >
+        {hovered ? (
+          <CaretRight
+            size={14}
+            className={cn(
+              "shrink-0 text-muted-foreground transition-transform duration-200",
+              expanded && "rotate-90"
+            )}
+          />
+        ) : (
+          <Brain size={14} className="shrink-0 text-muted-foreground" />
+        )}
+        <span className="font-mono text-muted-foreground/60 truncate flex-1 text-left">
+          {isStreaming ? <Shimmer duration={1.5}>{summary}</Shimmer> : summary}
+        </span>
+      </button>
+      <AnimatePresence initial={false}>
+        {expanded && (
+          <motion.div
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: 'auto', opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.15, ease: 'easeOut' }}
+            style={{ overflow: 'hidden' }}
+          >
+            <div className="ml-6 px-2 py-1.5 text-xs text-muted-foreground/70 border-l-2 border-border/30 prose prose-sm dark:prose-invert max-w-none">
+              <Streamdown plugins={thinkingPlugins}>{content}</Streamdown>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
 // Compact row for a single tool action
 // ---------------------------------------------------------------------------
 
-function ToolActionRow({ tool }: { tool: ToolAction }) {
-  const category = getToolCategory(tool.name);
-  const toolIcon = getToolIcon(category);
-  const summary = getToolSummary(tool.name, tool.input, category);
+function ToolActionRow({ tool, streamingToolOutput }: { tool: ToolAction; streamingToolOutput?: string }) {
+  const renderer = getRenderer(tool.name);
+  const summary = renderer.getSummary(tool.input, tool.name);
   const filePath = getFilePath(tool.input);
   const status = getStatus(tool);
-
-  const label = category === 'bash' ? '' : tool.name;
+  const isBash = renderer.icon === Terminal;
+  const showDetail = isBash && renderer.renderDetail && (status === 'running' || streamingToolOutput || tool.result);
 
   return (
-    <div className="flex items-center gap-2 px-2 py-1 min-h-[28px] text-xs hover:bg-muted/30 rounded-sm transition-colors">
-      {createElement(toolIcon, { size: 14, className: "shrink-0 text-muted-foreground" })}
+    <div>
+      <div className="flex items-center gap-2 px-2 py-1 min-h-[28px] text-xs hover:bg-muted/30 rounded-sm transition-colors">
+        {createElement(renderer.icon, { size: 14, className: "shrink-0 text-muted-foreground" })}
 
-      {label && (
-        <span className="font-medium text-muted-foreground shrink-0">{label}</span>
-      )}
+        {renderer.label && (
+          <span className="font-medium text-muted-foreground shrink-0">{renderer.label}</span>
+        )}
 
-      <span className="font-mono text-muted-foreground/60 truncate flex-1">
-        {summary}
-      </span>
-
-      {filePath && (category === 'read' || category === 'write') && (
-        <span className="text-muted-foreground/40 text-[11px] font-mono truncate max-w-[200px] hidden sm:inline">
-          {truncatePath(filePath)}
+        <span className="font-mono text-muted-foreground/60 truncate flex-1">
+          {summary}
         </span>
-      )}
 
-      {tool.media && tool.media.length > 0 && (
-        <ImageIcon size={14} className="shrink-0 text-primary/60" />
-      )}
+        {filePath && !isBash && (
+          <span className="text-muted-foreground/40 text-[11px] font-mono truncate max-w-[200px] hidden sm:inline">
+            {truncatePath(filePath)}
+          </span>
+        )}
 
-      <StatusDot status={status} />
+        {tool.media && tool.media.length > 0 && (
+          <ImageIcon size={14} className="shrink-0 text-primary/60" />
+        )}
+
+        <StatusDot status={status} />
+      </div>
+      {showDetail && renderer.renderDetail?.(tool, streamingToolOutput)}
     </div>
   );
 }
@@ -189,8 +438,7 @@ function getRunningDescription(tools: ToolAction[]): string {
   const running = tools.filter((t) => t.result === undefined);
   if (running.length === 0) return '';
   const last = running[running.length - 1];
-  const category = getToolCategory(last.name);
-  return getToolSummary(last.name, last.input, category);
+  return getRenderer(last.name).getSummary(last.input, last.name);
 }
 
 // ---------------------------------------------------------------------------
@@ -200,7 +448,9 @@ function getRunningDescription(tools: ToolAction[]): string {
 export function ToolActionsGroup({
   tools,
   isStreaming = false,
-  streamingToolOutput: _streamingToolOutput,
+  streamingToolOutput,
+  flat = false,
+  thinkingContent,
 }: ToolActionsGroupProps) {
   const hasRunningTool = tools.some((t) => t.result === undefined);
 
@@ -210,7 +460,30 @@ export function ToolActionsGroup({
   // Derived: if user has toggled, use their choice; otherwise auto-expand based on streaming state
   const expanded = userExpandedState !== null ? userExpandedState : (hasRunningTool || isStreaming);
 
-  if (tools.length === 0) return null;
+  if (tools.length === 0 && !thinkingContent) return null;
+
+  // Flat mode: skip header, render tool list directly
+  if (flat) {
+    const lastRunningId = [...tools].reverse().find((t) => t.result === undefined)?.id;
+    return (
+      <div className="w-[min(100%,48rem)]">
+        <div className="border-l-2 border-border/50 pl-2 ml-1.5">
+          {thinkingContent && <ThinkingRow content={thinkingContent} isStreaming={isStreaming} />}
+          {computeSegments(tools).map((seg, i) =>
+            seg.kind === 'context' ? (
+              <ContextGroup key={`ctx-group-${i}`} tools={seg.tools} />
+            ) : (
+              <ToolActionRow
+                key={seg.tool.id || `tool-${i}`}
+                tool={seg.tool}
+                streamingToolOutput={seg.tool.id === lastRunningId ? streamingToolOutput : undefined}
+              />
+            )
+          )}
+        </div>
+      </div>
+    );
+  }
 
   const runningCount = tools.filter((t) => t.result === undefined).length;
   const doneCount = tools.length - runningCount;
@@ -229,34 +502,34 @@ export function ToolActionsGroup({
 
   return (
     <div className="w-[min(100%,48rem)]">
-      {/* Header — minimal: chevron + count + gray summary */}
+      {/* Header — content left, caret right */}
       <button
         type="button"
         onClick={handleToggle}
         className="flex w-full items-center gap-2 py-1 text-xs rounded-sm hover:bg-muted/30 transition-colors"
       >
-        <CaretRight
-          size={12}
-          className={cn(
-            "shrink-0 text-muted-foreground/60 transition-transform duration-200",
-            expanded && "rotate-90"
-          )}
-        />
-
         <span className="inline-flex items-center justify-center rounded bg-muted/80 px-1.5 py-0.5 text-[10px] font-medium leading-none text-muted-foreground/70 tabular-nums">
-          {tools.length}
+          {tools.length + (thinkingContent ? 1 : 0)}
         </span>
 
         <span className="text-muted-foreground/60 truncate">
           {summaryParts.join(' · ')}
         </span>
 
-        {/* Show running task description on the right */}
+        {/* Show running task description */}
         {runningDesc && (
-          <span className="ml-auto text-muted-foreground/40 text-[11px] font-mono truncate max-w-[40%]">
-            {runningDesc}
+          <span className="text-muted-foreground/40 text-[11px] font-mono truncate max-w-[40%]">
+            {hasRunningTool ? <Shimmer duration={1.5}>{runningDesc}</Shimmer> : runningDesc}
           </span>
         )}
+
+        <CaretRight
+          size={12}
+          className={cn(
+            "shrink-0 text-muted-foreground/60 transition-transform duration-200 ml-auto",
+            expanded && "rotate-90"
+          )}
+        />
       </button>
 
       {/* Expanded list — left vertical line like blockquote */}
@@ -276,9 +549,23 @@ export function ToolActionsGroup({
               transition={{ duration: 0.12, ease: 'easeOut' }}
             >
               <div className="ml-1.5 mt-0.5 border-l-2 border-border/50 pl-2">
-                {tools.map((tool, i) => (
-                  <ToolActionRow key={tool.id || `tool-${i}`} tool={tool} />
-                ))}
+                {thinkingContent && <ThinkingRow content={thinkingContent} isStreaming={isStreaming} />}
+                {(() => {
+                  const segments = computeSegments(tools);
+                  // Find the last running tool to attach streamingToolOutput
+                  const lastRunningId = [...tools].reverse().find((t) => t.result === undefined)?.id;
+                  return segments.map((seg, i) =>
+                    seg.kind === 'context' ? (
+                      <ContextGroup key={`ctx-group-${i}`} tools={seg.tools} />
+                    ) : (
+                      <ToolActionRow
+                        key={seg.tool.id || `tool-${i}`}
+                        tool={seg.tool}
+                        streamingToolOutput={seg.tool.id === lastRunningId ? streamingToolOutput : undefined}
+                      />
+                    )
+                  );
+                })()}
               </div>
             </motion.div>
           </motion.div>

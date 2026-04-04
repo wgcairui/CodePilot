@@ -101,12 +101,13 @@ Gemini image generation API, used by the design Agent.
 - **Auth**: API Key
 - **Note**: This is a provider specifically for image generation, not for text conversations
 
-### Custom API (OpenAI-Compatible)
+### Ollama (Local Models)
 
-Any endpoint compatible with the OpenAI Chat Completions API.
+Run local models through Ollama. Ollama provides an Anthropic-compatible API that CodePilot can connect to directly.
 
-- **Auth**: API Key + Base URL
-- **Use case**: Connect local models (Ollama, LM Studio, vLLM) or other third-party proxies
+- **Auth**: No API key needed (handled automatically)
+- **Prerequisite**: Ollama must be installed and running
+- **Setup**: See [Ollama Setup Guide](#ollama-setup-guide) below
 
 ### LiteLLM
 
@@ -155,4 +156,41 @@ Unified proxy supporting 100+ LLM providers.
 
 ### How to use local models
 
-Select the **Custom API (OpenAI-Compatible)** type, and enter the local service address as the Base URL (e.g., `http://localhost:11434/v1`). The API key can be any value (local services typically don't validate it).
+The recommended way is to use the **Ollama** preset — see the [Ollama Setup Guide](#ollama-setup-guide) below. You can also use **LiteLLM** to connect other local inference frameworks (vLLM, LM Studio, etc.).
+
+---
+
+## Ollama Setup Guide
+
+Ollama lets you run open-source models locally — no API key required, completely free. This guide walks through the full setup using `gemma4:e4b` as an example.
+
+### Step 1: Install Ollama and Run a Model
+
+```bash
+# Install Ollama
+curl -fsSL https://ollama.com/install.sh | sh
+
+# Pull and run a model (this also starts the Ollama service)
+ollama run gemma4:e4b
+```
+
+The model will enter interactive chat mode. Once you confirm it responds normally, press `Ctrl+D` to exit. The Ollama service continues running in the background.
+
+> **Model names matter**: The model name you enter in CodePilot must **exactly match** the name shown by `ollama list` (including the tag after the colon). For example, `gemma4:e4b` — not just `gemma4`.
+
+For more models and usage, see the [Ollama documentation](https://docs.ollama.com/).
+
+### Step 2: Add Ollama in CodePilot
+
+1. Open **Settings > Providers**
+2. Find **Ollama** at the bottom of the provider list and click **+ Connect**
+3. Configure:
+   - **Base URL**: Keep the default `http://localhost:11434` (change if Ollama runs on a different port or remote machine)
+   - **Model Name**: Enter `gemma4:e4b` (must exactly match the name from `ollama list`)
+4. Click **Save**
+
+### Step 3: Start Chatting
+
+1. Create a new conversation
+2. Switch to **Ollama** in the provider selector at the top of the conversation
+3. Send a message — the model runs inference locally

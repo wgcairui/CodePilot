@@ -1,6 +1,6 @@
 {
   "name": "codepilot",
-  "version": "0.45.1",
+  "version": "0.46.0",
   "private": true,
   "license": "BUSL-1.1",
   "workspaces": [
@@ -9,9 +9,9 @@
   ],
   "author": {
     "name": "op7418",
-    "email": "7418@openclaw.ai"
+    "url": "https://x.com/op7418"
   },
-  "description": "A native desktop GUI client for Claude Code",
+  "description": "A multi-model AI agent desktop client",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "next dev",

@@ -28,6 +28,7 @@ interface ToolUseInfo {
 interface ToolResultInfo {
   tool_use_id: string;
   content: string;
+  is_error?: boolean;
 }
 
 export default function NewChatPage() {

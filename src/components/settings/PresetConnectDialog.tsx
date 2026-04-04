@@ -120,17 +120,25 @@ export function PresetConnectDialog({
       // Edit mode — pre-fill from existing provider
       setName(editProvider.name);
       setBaseUrl(editProvider.base_url);
-      setApiKey(editProvider.api_key || "");
       setExtraEnv(editProvider.extra_env || preset.extra_env);
       // Detect auth style from existing extra_env
+      let detected: 'auth_token' | 'api_key' = 'api_key';
       try {
         const env = JSON.parse(editProvider.extra_env || "{}");
-        const detected = "ANTHROPIC_AUTH_TOKEN" in env ? "auth_token" as const : "api_key" as const;
-        setAuthStyle(detected);
-        setInitialAuthStyle(detected);
-      } catch {
-        setAuthStyle("api_key");
-        setInitialAuthStyle("api_key");
+        detected = "ANTHROPIC_AUTH_TOKEN" in env ? "auth_token" : "api_key";
+      } catch { /* keep default */ }
+      setAuthStyle(detected);
+      setInitialAuthStyle(detected);
+      // If api_key field isn't shown and stored key is empty, use preset default
+      // (e.g. Ollama needs ANTHROPIC_AUTH_TOKEN='ollama' without user input)
+      if (!preset.fields.includes("api_key") && !editProvider.api_key) {
+        const presetEnv = (() => { try { return JSON.parse(preset.extra_env || '{}'); } catch { return {}; } })();
+        const defaultToken = detected === 'auth_token'
+          ? (presetEnv['ANTHROPIC_AUTH_TOKEN'] || '')
+          : (presetEnv['ANTHROPIC_API_KEY'] || '');
+        setApiKey(defaultToken);
+      } else {
+        setApiKey(editProvider.api_key || "");
       }
       // Pre-fill advanced fields
       setHeadersJson(editProvider.headers_json || "{}");
@@ -171,7 +179,6 @@ export function PresetConnectDialog({
       setShowAdvanced(hasModelMapping || hasExtraEnvBeyondAuth || !!hasHeaders || hasEnvOverrides || hasNotes);
     } else {
       // Create mode — reset to preset defaults
-      setApiKey("");
       setBaseUrl(preset.base_url);
       setName(preset.name);
       setExtraEnv(preset.extra_env);
@@ -179,6 +186,16 @@ export function PresetConnectDialog({
       // Auto-detect auth style from preset's extra_env
       const presetEnv = (() => { try { return JSON.parse(preset.extra_env || '{}'); } catch { return {}; } })();
       const detectedStyle = 'ANTHROPIC_AUTH_TOKEN' in presetEnv ? 'auth_token' as const : 'api_key' as const;
+      // If preset doesn't expose api_key field, pre-fill from extra_env default
+      // (e.g. Ollama needs ANTHROPIC_AUTH_TOKEN='ollama' without user input)
+      if (!preset.fields.includes("api_key")) {
+        const defaultToken = detectedStyle === 'auth_token'
+          ? (presetEnv['ANTHROPIC_AUTH_TOKEN'] || '')
+          : (presetEnv['ANTHROPIC_API_KEY'] || '');
+        setApiKey(defaultToken);
+      } else {
+        setApiKey("");
+      }
       setAuthStyle(detectedStyle);
       setInitialAuthStyle(detectedStyle);
       setMapSonnet("");

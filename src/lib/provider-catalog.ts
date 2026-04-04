@@ -430,28 +430,23 @@ export const VENDOR_PRESETS: VendorPreset[] = [
     iconKey: 'google',
   },
 
-  // ── Ollama (local) ──
+  // ── Ollama ──
   {
     key: 'ollama',
     name: 'Ollama',
-    description: 'Run local models via Ollama — Gemma, Llama, Qwen and more',
-    descriptionZh: '通过 Ollama 运行本地模型 — Gemma、Llama、Qwen 等',
-    protocol: 'openai-compatible',
-    authStyle: 'api_key',
-    baseUrl: 'http://localhost:11434/v1',
-    defaultEnvOverrides: {},
-    defaultModels: [
-      { modelId: 'gemma4:e4b', displayName: 'Gemma 4 E4B', role: 'default' },
-      { modelId: 'gemma4:e2b', displayName: 'Gemma 4 E2B' },
-      { modelId: 'llama3.3', displayName: 'Llama 3.3' },
-      { modelId: 'qwen2.5-coder:7b', displayName: 'Qwen 2.5 Coder 7B' },
-      { modelId: 'deepseek-r2:8b', displayName: 'DeepSeek R2 8B' },
-    ],
-    defaultRoleModels: {
-      default: 'gemma4:e4b',
+    description: 'Ollama — run local models with Anthropic-compatible API',
+    descriptionZh: 'Ollama — 本地运行模型，Anthropic 兼容 API',
+    protocol: 'anthropic',
+    authStyle: 'auth_token',
+    baseUrl: 'http://localhost:11434',
+    defaultEnvOverrides: {
+      ANTHROPIC_AUTH_TOKEN: 'ollama',
+      ANTHROPIC_API_KEY: '',
     },
+    defaultModels: [],  // User must specify — depends on pulled models
     fields: ['base_url', 'model_names'],
     iconKey: 'ollama',
+    sdkProxyOnly: true,
   },
 
   // ── LiteLLM ──
@@ -561,14 +556,6 @@ export function inferProtocolFromLegacy(
   if (providerType === 'gemini-image') return 'gemini-image';
   if (providerType === 'minimax-media') return 'minimax-media';
 
-  // For 'custom' type, check if the base_url matches a known OpenAI-compatible local server
-  if (providerType === 'custom') {
-    const urlLower = baseUrl.toLowerCase();
-    if (urlLower.includes('localhost:11434') || urlLower.includes('ollama')) {
-      return 'openai-compatible';
-    }
-  }
-
   // For 'custom' type, check if the base_url matches a known Anthropic-compatible vendor
   if (providerType === 'custom') {
     const anthropicUrls = [
@@ -578,6 +565,7 @@ export function inferProtocolFromLegacy(
       'volces.com', 'volcengine.com',   // Volcengine
       'dashscope.aliyuncs.com',         // Bailian
       'xiaomimimo.com',                 // Xiaomi MiMo
+      'localhost:11434',                // Ollama
     ];
     const urlLower = baseUrl.toLowerCase();
     if (anthropicUrls.some(u => urlLower.includes(u))) {

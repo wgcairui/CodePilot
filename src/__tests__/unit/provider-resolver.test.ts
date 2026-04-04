@@ -100,11 +100,11 @@ describe('Provider Catalog', () => {
       assert.equal(custom, undefined, 'custom-openai preset should not exist');
     });
 
-    it('Ollama preset uses openai-compatible protocol with local base URL', () => {
+    it('Ollama preset uses anthropic protocol with local base URL', () => {
       const ollama = VENDOR_PRESETS.find(p => p.key === 'ollama');
       assert.ok(ollama, 'Ollama preset not found');
-      assert.equal(ollama.protocol, 'openai-compatible');
-      assert.equal(ollama.baseUrl, 'http://localhost:11434/v1');
+      assert.equal(ollama.protocol, 'anthropic');
+      assert.equal(ollama.baseUrl, 'http://localhost:11434');
       assert.ok(ollama.fields.includes('model_names'), 'should expose model_names field');
     });
 
@@ -356,8 +356,8 @@ describe('Provider Resolver', () => {
 
       const env = toClaudeCodeEnv({ PATH: '/usr/bin', ANTHROPIC_API_KEY: 'old-key' }, resolved);
       assert.equal(env.ANTHROPIC_AUTH_TOKEN, 'kimi-key');
-      // auth_token style should NOT set ANTHROPIC_API_KEY
-      assert.equal(env.ANTHROPIC_API_KEY, undefined);
+      // auth_token style explicitly clears ANTHROPIC_API_KEY (required by Ollama etc.)
+      assert.equal(env.ANTHROPIC_API_KEY, '');
     });
 
     it('applies env overrides with empty-string deletion', () => {

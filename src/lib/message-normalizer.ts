@@ -33,7 +33,14 @@ export function normalizeMessageContent(role: string, raw: string): string {
       const blocks = JSON.parse(content);
       const parts: string[] = [];
       for (const b of blocks) {
-        if (b.type === 'text' && b.text) {
+        if (b.type === 'thinking' && b.thinking) {
+          // Summarize thinking — extract first bold/heading or truncate
+          const thinkingText = String(b.thinking);
+          const boldMatch = thinkingText.match(/\*\*(.+?)\*\*/);
+          const headingMatch = thinkingText.match(/^#{1,4}\s+(.+)$/m);
+          const summary = boldMatch?.[1] || headingMatch?.[1] || thinkingText.slice(0, 80);
+          parts.push(`(reasoning: ${summary})`);
+        } else if (b.type === 'text' && b.text) {
           parts.push(b.text);
         } else if (b.type === 'tool_use') {
           // Keep a brief summary of tool usage (name + truncated input)

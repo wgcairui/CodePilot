@@ -152,6 +152,7 @@ export interface MediaBlock {
 // Structured message content blocks (stored as JSON in messages.content)
 export type MessageContentBlock =
   | { type: 'text'; text: string }
+  | { type: 'thinking'; thinking: string }
   | { type: 'tool_use'; id: string; name: string; input: unknown }
   | { type: 'tool_result'; tool_use_id: string; content: string; is_error?: boolean; media?: MediaBlock[] }
   | { type: 'code'; language: string; code: string };
@@ -476,6 +477,7 @@ export interface SkillResponse {
 
 export type SSEEventType =
   | 'text'               // text content delta
+  | 'thinking'           // extended thinking content delta
   | 'tool_use'           // tool invocation info
   | 'tool_result'        // tool execution result
   | 'tool_output'        // streaming tool output (stderr from SDK process)
@@ -953,6 +955,7 @@ export interface ToolUseInfo {
 export interface ToolResultInfo {
   tool_use_id: string;
   content: string;
+  is_error?: boolean;
   media?: MediaBlock[];
 }
 
@@ -962,6 +965,7 @@ export interface SessionStreamSnapshot {
   sessionId: string;
   phase: StreamPhase;
   streamingContent: string;
+  streamingThinkingContent: string;
   toolUses: ToolUseInfo[];
   toolResults: ToolResultInfo[];
   streamingToolOutput: string;

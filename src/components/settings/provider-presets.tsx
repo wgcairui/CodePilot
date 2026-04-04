@@ -1,7 +1,7 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { HardDrives, Gear } from "@/components/ui/icon";
+import { HardDrives } from "@/components/ui/icon";
 import type { ApiProvider } from "@/types";
 import Anthropic from "@lobehub/icons/es/Anthropic";
 import OpenRouter from "@lobehub/icons/es/OpenRouter";
@@ -39,6 +39,7 @@ export function getProviderIcon(name: string, baseUrl: string): ReactNode {
     return <Bailian size={18} />;
   if (url.includes("xiaomimimo") || lower.includes("mimo") || lower.includes("小米"))
     return <XiaomiMiMo size={18} />;
+  if (url.includes("11434") || lower.includes("ollama")) return <Ollama size={18} />;
   if (lower.includes("bedrock")) return <Bedrock size={18} />;
   if (lower.includes("vertex") || lower.includes("google")) return <Google size={18} />;
   if (lower.includes("aws")) return <Aws size={18} />;
@@ -252,17 +253,17 @@ export const QUICK_PRESETS: QuickPreset[] = [
     extra_env: '{"CLAUDE_CODE_USE_VERTEX":"1","CLOUD_ML_REGION":"us-east5","CLAUDE_CODE_SKIP_VERTEX_AUTH":"1"}',
     fields: ["extra_env"],
   },
-  // ── Local models ──
+  // ── Local / self-hosted ──
   {
     key: "ollama",
     name: "Ollama",
-    description: "Run local models via Ollama — Gemma, Llama, Qwen and more",
-    descriptionZh: "通过 Ollama 运行本地模型 — Gemma、Llama、Qwen 等",
+    description: "Ollama — run local models with Anthropic-compatible API",
+    descriptionZh: "Ollama — 本地运行模型，Anthropic 兼容 API",
     icon: <Ollama size={18} />,
-    provider_type: "custom",
-    protocol: "openai-compatible",
-    base_url: "http://localhost:11434/v1",
-    extra_env: "{}",
+    provider_type: "anthropic",
+    protocol: "anthropic",
+    base_url: "http://localhost:11434",
+    extra_env: '{"ANTHROPIC_AUTH_TOKEN":"ollama","ANTHROPIC_API_KEY":""}',
     fields: ["base_url", "model_names"],
   },
   // ── Proxy / gateway ──
@@ -398,11 +399,9 @@ export function findMatchingPreset(provider: ApiProvider): QuickPreset | undefin
   if (provider.provider_type === "anthropic" && provider.base_url) {
     return QUICK_PRESETS.find(p => p.key === "anthropic-thirdparty");
   }
-  // OpenAI-compatible providers (e.g. Ollama) — match by protocol
-  if (provider.protocol === 'openai-compatible' || provider.provider_type === 'custom') {
-    if (provider.base_url?.includes('localhost:11434') || provider.base_url?.includes('ollama')) {
-      return QUICK_PRESETS.find(p => p.key === 'ollama');
-    }
+  // Anthropic-type with Ollama base URL → ollama preset
+  if (provider.base_url?.includes('localhost:11434') || provider.base_url?.toLowerCase().includes('ollama')) {
+    return QUICK_PRESETS.find(p => p.key === 'ollama');
   }
   return undefined;
 }

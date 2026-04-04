@@ -1229,6 +1229,9 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
                 if ('text' in delta && delta.text) {
                   controller.enqueue(formatSSE({ type: 'text', data: delta.text }));
                 }
+                if ('thinking' in delta && (delta as { thinking?: string }).thinking) {
+                  controller.enqueue(formatSSE({ type: 'thinking', data: (delta as { thinking: string }).thinking }));
+                }
               }
               break;
             }
@@ -1460,18 +1463,70 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
                   break;
                 }
                 case 'user': {
-                  const uMsg = msg as { type: 'user'; message: { content: Array<{ type: string; content?: string; tool_use_id?: string }> } };
+                  const uMsg = msg as { type: 'user'; message: { content: Array<{ type: string; content?: string | Array<Record<string, unknown>>; tool_use_id?: string; is_error?: boolean }> } };
                   for (const block of uMsg.message.content) {
-                    if (block.type === 'tool_result' && typeof block.content === 'string') {
-                      controller.enqueue(formatSSE({ type: 'tool_result', data: JSON.stringify({ tool_use_id: block.tool_use_id, output: block.content.slice(0, 2000) }) }));
+                    if (block.type === 'tool_result') {
+                      const retryMedia: MediaBlock[] = [];
+                      let retryContent = '';
+
+                      if (Array.isArray(block.content)) {
+                        // Array-form tool result (external MCP): extract text + image/audio blocks
+                        const textParts: string[] = [];
+                        for (const c of block.content) {
+                          const cb = c as { type: string; text?: string; data?: string; mimeType?: string; media_type?: string };
+                          if (cb.type === 'text' && cb.text) {
+                            textParts.push(cb.text);
+                          } else if ((cb.type === 'image' || cb.type === 'audio') && cb.data) {
+                            retryMedia.push({
+                              type: cb.type === 'audio' ? 'audio' : 'image',
+                              data: cb.data,
+                              mimeType: cb.mimeType || cb.media_type || (cb.type === 'image' ? 'image/png' : 'audio/wav'),
+                            });
+                          }
+                        }
+                        retryContent = textParts.join('\n').slice(0, 2000);
+                      } else if (typeof block.content === 'string') {
+                        retryContent = block.content.slice(0, 2000);
+                      }
+
+                      // Extract __MEDIA_RESULT__ markers from text content
+                      const RETRY_MEDIA_MARKER = '__MEDIA_RESULT__';
+                      const retryMarkerIdx = retryContent.indexOf(RETRY_MEDIA_MARKER);
+                      if (retryMarkerIdx >= 0) {
+                        try {
+                          const mediaJson = retryContent.slice(retryMarkerIdx + RETRY_MEDIA_MARKER.length).trim();
+                          const parsed = JSON.parse(mediaJson) as Array<{ type: string; mimeType: string; localPath: string; mediaId?: string }>;
+                          for (const m of parsed) {
+                            retryMedia.push({
+                              type: (m.type as MediaBlock['type']) || 'image',
+                              mimeType: m.mimeType,
+                              localPath: m.localPath,
+                              mediaId: m.mediaId,
+                            });
+                          }
+                        } catch { /* malformed marker */ }
+                        retryContent = retryContent.slice(0, retryMarkerIdx).trim();
+                      }
+
+                      controller.enqueue(formatSSE({ type: 'tool_result', data: JSON.stringify({
+                        tool_use_id: block.tool_use_id,
+                        content: retryContent,
+                        ...(block.is_error ? { is_error: true } : {}),
+                        ...(retryMedia.length > 0 ? { media: retryMedia } : {}),
+                      }) }));
                     }
                   }
                   break;
                 }
                 case 'stream_event': {
-                  const se = msg as { type: 'stream_event'; event: { type: string; delta?: { text?: string }; index?: number } };
-                  if (se.event.type === 'content_block_delta' && se.event.delta?.text) {
-                    controller.enqueue(formatSSE({ type: 'text', data: se.event.delta.text }));
+                  const se = msg as { type: 'stream_event'; event: { type: string; delta?: { text?: string; thinking?: string }; index?: number } };
+                  if (se.event.type === 'content_block_delta') {
+                    if (se.event.delta?.text) {
+                      controller.enqueue(formatSSE({ type: 'text', data: se.event.delta.text }));
+                    }
+                    if (se.event.delta?.thinking) {
+                      controller.enqueue(formatSSE({ type: 'thinking', data: se.event.delta.thinking }));
+                    }
                   }
                   break;
                 }
