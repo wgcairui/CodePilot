@@ -395,13 +395,13 @@ export function findMatchingPreset(provider: ApiProvider): QuickPreset | undefin
   if (provider.provider_type === "anthropic" && provider.base_url === "https://api.anthropic.com") {
     return QUICK_PRESETS.find(p => p.key === "anthropic-official");
   }
+  // Ollama before generic anthropic-thirdparty — both are anthropic protocol, but Ollama has a distinct preset
+  if (provider.base_url?.includes('localhost:11434') || provider.base_url?.toLowerCase().includes('ollama')) {
+    return QUICK_PRESETS.find(p => p.key === 'ollama');
+  }
   // Anthropic-type with custom base_url → anthropic-thirdparty
   if (provider.provider_type === "anthropic" && provider.base_url) {
     return QUICK_PRESETS.find(p => p.key === "anthropic-thirdparty");
-  }
-  // Anthropic-type with Ollama base URL → ollama preset
-  if (provider.base_url?.includes('localhost:11434') || provider.base_url?.toLowerCase().includes('ollama')) {
-    return QUICK_PRESETS.find(p => p.key === 'ollama');
   }
   return undefined;
 }

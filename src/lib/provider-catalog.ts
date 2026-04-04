@@ -549,6 +549,8 @@ export function inferProtocolFromLegacy(
   baseUrl: string,
 ): Protocol {
   // Direct type mappings
+  // Note: 'openai-compatible' is a valid Protocol but cannot be produced by this function.
+  // It only arrives via an explicitly-stored provider.protocol column in the DB.
   if (providerType === 'anthropic') return 'anthropic';
   if (providerType === 'openrouter') return 'openrouter';
   if (providerType === 'bedrock') return 'bedrock';

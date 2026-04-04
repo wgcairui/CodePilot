@@ -104,7 +104,9 @@ describe('Provider Catalog', () => {
       const ollama = VENDOR_PRESETS.find(p => p.key === 'ollama');
       assert.ok(ollama, 'Ollama preset not found');
       assert.equal(ollama.protocol, 'anthropic');
+      assert.equal(ollama.authStyle, 'auth_token');
       assert.equal(ollama.baseUrl, 'http://localhost:11434');
+      assert.equal(ollama.sdkProxyOnly, true, 'sdkProxyOnly must be true so ~/.claude/settings.json cannot shadow Ollama credentials');
       assert.ok(ollama.fields.includes('model_names'), 'should expose model_names field');
     });
 
