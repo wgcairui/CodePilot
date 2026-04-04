@@ -31,7 +31,7 @@
 | Phase 1 | Preset 声明式改造 + Schema 校验 | ✅ 已完成 | Zod PresetSchema + meta 字段 + 61 个新测试 |
 | Phase 2 | 宿主接管 + authStyle 修正 | ✅ 已完成 | 6 个 authStyle 修正 + PROVIDER_MANAGED_BY_HOST 注入 |
 | Phase 3 | 配置时连通性验证 | ✅ 已完成 | POST /api/providers/test + testProviderConnection() |
-| Phase 4 | 用户引导 UX（服务商信息面板） | 📋 待开始 | QUICK_PRESETS 去重 + 引导 UI，需 CDP 验证 |
+| Phase 4 | 用户引导 UX（服务商信息面板） | ✅ 已完成 | QUICK_PRESETS 去重（-181 行），meta 流通到前端 |
 | Phase 5 | 运行时错误治理 | ✅ 已完成 | RecoveryAction + providerMeta → 分类错误码 + 恢复按钮 |
 | Phase 6 | 模型目录动态化 | 📋 待开始 | |
 
