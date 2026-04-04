@@ -15,6 +15,7 @@ import Google from "@lobehub/icons/es/Google";
 import Volcengine from "@lobehub/icons/es/Volcengine";
 import Bailian from "@lobehub/icons/es/Bailian";
 import XiaomiMiMo from "@lobehub/icons/es/XiaomiMiMo";
+import Ollama from "@lobehub/icons/es/Ollama";
 
 // ---------------------------------------------------------------------------
 // Brand icon resolver
@@ -25,6 +26,7 @@ export function getProviderIcon(name: string, baseUrl: string): ReactNode {
   const lower = name.toLowerCase();
   const url = baseUrl.toLowerCase();
 
+  if (lower.includes("ollama") || url.includes("localhost:11434")) return <Ollama size={18} />;
   if (lower.includes("openrouter")) return <OpenRouter size={18} />;
   if (url.includes("bigmodel.cn") || url.includes("z.ai") || lower.includes("glm") || lower.includes("zhipu") || lower.includes("chatglm"))
     return <Zhipu size={18} />;
@@ -250,6 +252,19 @@ export const QUICK_PRESETS: QuickPreset[] = [
     extra_env: '{"CLAUDE_CODE_USE_VERTEX":"1","CLOUD_ML_REGION":"us-east5","CLAUDE_CODE_SKIP_VERTEX_AUTH":"1"}',
     fields: ["extra_env"],
   },
+  // ── Local models ──
+  {
+    key: "ollama",
+    name: "Ollama",
+    description: "Run local models via Ollama — Gemma, Llama, Qwen and more",
+    descriptionZh: "通过 Ollama 运行本地模型 — Gemma、Llama、Qwen 等",
+    icon: <Ollama size={18} />,
+    provider_type: "custom",
+    protocol: "openai-compatible",
+    base_url: "http://localhost:11434/v1",
+    extra_env: "{}",
+    fields: ["base_url", "model_names"],
+  },
   // ── Proxy / gateway ──
   {
     key: "litellm",
@@ -383,7 +398,11 @@ export function findMatchingPreset(provider: ApiProvider): QuickPreset | undefin
   if (provider.provider_type === "anthropic" && provider.base_url) {
     return QUICK_PRESETS.find(p => p.key === "anthropic-thirdparty");
   }
-  // Custom providers no longer have a matching preset (OpenAI-compatible removed).
-  // They are deleted during DB migration; any survivors use the generic edit form.
+  // OpenAI-compatible providers (e.g. Ollama) — match by protocol
+  if (provider.protocol === 'openai-compatible' || provider.provider_type === 'custom') {
+    if (provider.base_url?.includes('localhost:11434') || provider.base_url?.includes('ollama')) {
+      return QUICK_PRESETS.find(p => p.key === 'ollama');
+    }
+  }
   return undefined;
 }

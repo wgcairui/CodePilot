@@ -379,7 +379,9 @@ export function toAiSdkConfig(
     case 'openai-compatible':
       return {
         sdkType: 'openai',
-        apiKey: provider?.api_key || undefined,
+        // Ollama and similar local providers don't require an API key.
+        // Fall back to 'ollama' so createOpenAI() gets a non-empty string.
+        apiKey: provider?.api_key || 'ollama',
         authToken: undefined,
         baseUrl: provider?.base_url || undefined,
         modelId,

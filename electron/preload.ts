@@ -56,6 +56,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
       ipcRenderer.on('terminal:exit', listener);
       return () => { ipcRenderer.removeListener('terminal:exit', listener); };
     },
+    onNewTab: (cb: () => void) => {
+      const handler = () => cb();
+      ipcRenderer.on('terminal:new-tab', handler);
+      return () => ipcRenderer.removeListener('terminal:new-tab', handler);
+    },
   },
   remote: {
     connect: (hostId: string) => ipcRenderer.invoke('remote:connect', hostId),

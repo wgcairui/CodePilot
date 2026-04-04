@@ -58,6 +58,7 @@ interface ElectronTerminalAPI {
   kill: (id: string) => Promise<void>;
   onData: (callback: (data: { id: string; data: string }) => void) => () => void;
   onExit: (callback: (data: { id: string; code: number }) => void) => () => void;
+  onNewTab?: (callback: () => void) => () => void;
 }
 
 interface ElectronRemoteAPI {

@@ -100,6 +100,14 @@ describe('Provider Catalog', () => {
       assert.equal(custom, undefined, 'custom-openai preset should not exist');
     });
 
+    it('Ollama preset uses openai-compatible protocol with local base URL', () => {
+      const ollama = VENDOR_PRESETS.find(p => p.key === 'ollama');
+      assert.ok(ollama, 'Ollama preset not found');
+      assert.equal(ollama.protocol, 'openai-compatible');
+      assert.equal(ollama.baseUrl, 'http://localhost:11434/v1');
+      assert.ok(ollama.fields.includes('model_names'), 'should expose model_names field');
+    });
+
     it('anthropic-thirdparty preset uses anthropic protocol and has env_overrides field', () => {
       const preset = VENDOR_PRESETS.find(p => p.key === 'anthropic-thirdparty');
       assert.ok(preset, 'anthropic-thirdparty preset not found');

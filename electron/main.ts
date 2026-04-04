@@ -1,4 +1,4 @@
-import { app, BrowserWindow, Notification, nativeImage, dialog, session, utilityProcess, ipcMain, shell, Tray, Menu } from 'electron';
+import { app, BrowserWindow, Notification, nativeImage, dialog, session, utilityProcess, ipcMain, shell, Tray, Menu, globalShortcut } from 'electron';
 import path from 'path';
 import { execFileSync, spawn, ChildProcess } from 'child_process';
 import fs from 'fs';
@@ -709,7 +709,20 @@ function createWindow(url?: string) {
     mainWindow.webContents.openDevTools();
   }
 
+  mainWindow.on('focus', () => {
+    globalShortcut.register('CommandOrControl+T', () => {
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('terminal:new-tab');
+      }
+    });
+  });
+
+  mainWindow.on('blur', () => {
+    globalShortcut.unregister('CommandOrControl+T');
+  });
+
   mainWindow.on('closed', () => {
+    globalShortcut.unregister('CommandOrControl+T');
     mainWindow = null;
   });
 }

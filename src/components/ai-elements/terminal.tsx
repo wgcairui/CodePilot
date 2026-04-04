@@ -4,7 +4,8 @@ import type { ComponentProps, HTMLAttributes } from "react";
 
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import Ansi from "ansi-to-react";
+// Strip ANSI escape codes for display (ansi-to-react removed in favor of xterm.js for PTY)
+const stripAnsi = (str: string) => str.replace(/\x1B\[[0-9;]*[mGKHFJ]/g, "");
 import { Check, Copy, Terminal as TerminalIcon, Trash } from "@phosphor-icons/react";
 import {
   createContext,
@@ -266,7 +267,7 @@ export const TerminalContent = ({
     >
       {children ?? (
         <pre className="whitespace-pre-wrap break-words">
-          <Ansi>{output}</Ansi>
+          {stripAnsi(output)}
           {isStreaming && (
             <span className="ml-0.5 inline-block h-4 w-2 animate-pulse bg-[var(--terminal-foreground)]" />
           )}

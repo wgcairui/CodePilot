@@ -28,7 +28,9 @@ flex-row:
 
 - 挂载于 `<main>` 下方，独立于 PanelZone
 - 仅 Electron 有完整 PTY 功能；浏览器降级显示提示文字
-- PTY 生命周期由 `src/hooks/useTerminal.ts` 管理（create / write / resize / kill）
+- 多 Tab 状态由 `src/hooks/useTerminalTabs.ts` 管理；`TerminalInstance` 用 xterm.js 渲染
+- ⚠️ `fitAddon.fit()` 只能在 tab active（`display:block`）时调用——`display:none` 下 offsetWidth=0，会将 PTY resize 为 0 列破坏 shell 会话
+- ⚠️ `onExit`/`onData` 的 `payload.id` 是 **ptyId**（格式 `pty-xxx`），不是 tab.id（`tab-xxx`）
 
 ## DashboardPanel 分组架构
 

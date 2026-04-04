@@ -430,6 +430,30 @@ export const VENDOR_PRESETS: VendorPreset[] = [
     iconKey: 'google',
   },
 
+  // ── Ollama (local) ──
+  {
+    key: 'ollama',
+    name: 'Ollama',
+    description: 'Run local models via Ollama — Gemma, Llama, Qwen and more',
+    descriptionZh: '通过 Ollama 运行本地模型 — Gemma、Llama、Qwen 等',
+    protocol: 'openai-compatible',
+    authStyle: 'api_key',
+    baseUrl: 'http://localhost:11434/v1',
+    defaultEnvOverrides: {},
+    defaultModels: [
+      { modelId: 'gemma4:e4b', displayName: 'Gemma 4 E4B', role: 'default' },
+      { modelId: 'gemma4:e2b', displayName: 'Gemma 4 E2B' },
+      { modelId: 'llama3.3', displayName: 'Llama 3.3' },
+      { modelId: 'qwen2.5-coder:7b', displayName: 'Qwen 2.5 Coder 7B' },
+      { modelId: 'deepseek-r2:8b', displayName: 'DeepSeek R2 8B' },
+    ],
+    defaultRoleModels: {
+      default: 'gemma4:e4b',
+    },
+    fields: ['base_url', 'model_names'],
+    iconKey: 'ollama',
+  },
+
   // ── LiteLLM ──
   {
     key: 'litellm',
@@ -536,6 +560,14 @@ export function inferProtocolFromLegacy(
   if (providerType === 'vertex') return 'vertex';
   if (providerType === 'gemini-image') return 'gemini-image';
   if (providerType === 'minimax-media') return 'minimax-media';
+
+  // For 'custom' type, check if the base_url matches a known OpenAI-compatible local server
+  if (providerType === 'custom') {
+    const urlLower = baseUrl.toLowerCase();
+    if (urlLower.includes('localhost:11434') || urlLower.includes('ollama')) {
+      return 'openai-compatible';
+    }
+  }
 
   // For 'custom' type, check if the base_url matches a known Anthropic-compatible vendor
   if (providerType === 'custom') {
