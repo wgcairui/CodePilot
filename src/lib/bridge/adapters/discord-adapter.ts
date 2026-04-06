@@ -70,6 +70,8 @@ export class DiscordAdapter extends BaseChannelAdapter {
   private previewMessages = new Map<string, string>();
   /** Chats where preview has permanently failed. */
   private previewDegraded = new Set<string>();
+  /** Periodic health-check timer — detects zombie connections and triggers self-restart. */
+  private healthCheckTimer: ReturnType<typeof setInterval> | null = null;
 
   // ── Lifecycle ───────────────────────────────────────────────
 
@@ -142,12 +144,51 @@ export class DiscordAdapter extends BaseChannelAdapter {
     this.botUserId = this.client.user?.id || null;
     this.running = true;
 
+    // Handle shard disconnect — discord.js exhausted all reconnect attempts.
+    // Mark adapter as stopped and release any blocked consumeOne() waiters so
+    // bridge-manager's loop exits cleanly and can schedule a restart.
+    this.client.on('shardDisconnect', (_event: unknown, shardId: number) => {
+      if (!this.running) return;
+      console.warn(`[discord-adapter] Shard ${shardId} disconnected — marking adapter stopped`);
+      this.markStopped();
+    });
+
+    // Periodic health-check: detect zombie connections where the WebSocket
+    // appears open but the client is no longer ready (e.g. proxy cut the
+    // heartbeat silently). Checks every 60s; triggers self-stop so
+    // bridge-manager's backoff-restart loop can reconnect cleanly.
+    this.healthCheckTimer = setInterval(() => {
+      if (!this.running) return;
+      if (!this.client || !this.client.isReady()) {
+        console.warn('[discord-adapter] Health-check: client not ready — marking adapter stopped');
+        this.markStopped();
+      }
+    }, 60_000);
+
     console.log('[discord-adapter] Started (botUserId:', this.botUserId || 'unknown', ')');
+  }
+
+  /**
+   * Mark the adapter as stopped and release all blocked consumeOne() waiters.
+   * Called from stop(), shardDisconnect handler, and health-check timer.
+   */
+  private markStopped(): void {
+    this.running = false;
+
+    if (this.healthCheckTimer) {
+      clearInterval(this.healthCheckTimer);
+      this.healthCheckTimer = null;
+    }
+
+    for (const waiter of this.waiters) {
+      waiter(null);
+    }
+    this.waiters = [];
   }
 
   async stop(): Promise<void> {
     if (!this.running) return;
-    this.running = false;
+    this.markStopped();
 
     // Destroy client
     if (this.client) {
@@ -159,11 +200,7 @@ export class DiscordAdapter extends BaseChannelAdapter {
       this.client = null;
     }
 
-    // Reject all waiting consumers
-    for (const waiter of this.waiters) {
-      waiter(null);
-    }
-    this.waiters = [];
+    // waiters already released in markStopped()
 
     // Stop all typing indicators
     for (const [, interval] of this.typingIntervals) {

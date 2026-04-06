@@ -197,6 +197,8 @@ async function deliverResponse(
 interface AdapterMeta {
   lastMessageAt: string | null;
   lastError: string | null;
+  /** Tracks consecutive restart attempts for exponential backoff. Reset to 0 on success. */
+  restartAttempts?: number;
 }
 
 interface BridgeManagerState {
@@ -484,6 +486,35 @@ function runAdapterLoop(adapter: BaseChannelAdapter): void {
         state.adapterMeta.set(adapter.channelType, meta);
         // Brief delay to prevent tight error loops
         await new Promise(r => setTimeout(r, 1000));
+      }
+    }
+
+    // Loop exited — if bridge is still running but adapter stopped unexpectedly,
+    // schedule a restart with exponential backoff (30s → 60s → 120s, cap 120s).
+    if (state.running && !abort.signal.aborted && !adapter.isRunning()) {
+      const meta = state.adapterMeta.get(adapter.channelType) || { lastMessageAt: null, lastError: null };
+      const attempt = meta.restartAttempts ?? 0;
+      const delayMs = Math.min(30_000 * Math.pow(2, attempt), 120_000);
+      meta.restartAttempts = attempt + 1;
+      state.adapterMeta.set(adapter.channelType, meta);
+      console.warn(`[bridge-manager] ${adapter.channelType} adapter stopped unexpectedly — restarting in ${delayMs / 1000}s (attempt ${attempt + 1})`);
+      await new Promise(r => setTimeout(r, delayMs));
+      if (state.running && !abort.signal.aborted) {
+        try {
+          await adapter.start();
+          meta.restartAttempts = 0;
+          meta.lastError = null;
+          state.adapterMeta.set(adapter.channelType, meta);
+          console.log(`[bridge-manager] ${adapter.channelType} adapter restarted successfully`);
+          runAdapterLoop(adapter);
+        } catch (restartErr) {
+          const errMsg = restartErr instanceof Error ? restartErr.message : String(restartErr);
+          console.error(`[bridge-manager] ${adapter.channelType} adapter restart failed:`, errMsg);
+          meta.lastError = errMsg;
+          state.adapterMeta.set(adapter.channelType, meta);
+          // Schedule another attempt by re-running the loop (isRunning() still false)
+          runAdapterLoop(adapter);
+        }
       }
     }
   })().catch(err => {
