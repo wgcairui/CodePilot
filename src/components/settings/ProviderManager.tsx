@@ -691,7 +691,7 @@ export function ProviderManager() {
                       <span className="text-sm font-medium truncate">{provider.name}</span>
                       <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
                         {provider.api_key
-                          ? (provider.extra_env?.includes("ANTHROPIC_AUTH_TOKEN") ? "Auth Token" : "API Key")
+                          ? (findMatchingPreset(provider)?.authStyle === 'auth_token' ? "Auth Token" : "API Key")
                           : t('provider.configured')}
                       </Badge>
                     </div>

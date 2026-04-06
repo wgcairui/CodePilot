@@ -1379,6 +1379,11 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
           code: error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined,
         });
 
+        // Look up preset meta for recovery action URLs
+        const presetForMeta = resolved.provider?.base_url
+          ? (await import('./provider-catalog')).findPresetForLegacy(resolved.provider.base_url, resolved.provider.provider_type, resolved.protocol)
+          : undefined;
+
         // Classify the error using structured pattern matching
         const classified = classifyError({
           error,
@@ -1389,6 +1394,11 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
           thinkingEnabled: !!thinking,
           context1mEnabled: !!context1m,
           effortSet: !!effort,
+          providerMeta: presetForMeta?.meta ? {
+            apiKeyUrl: presetForMeta.meta.apiKeyUrl,
+            docsUrl: presetForMeta.meta.docsUrl,
+            pricingUrl: presetForMeta.meta.pricingUrl,
+          } : undefined,
         });
 
         // ── Reactive compact: auto-compress and retry on CONTEXT_TOO_LONG ──
@@ -1566,6 +1576,7 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
             providerName: classified.providerName,
             details: classified.details,
             rawMessage: classified.rawMessage,
+            recoveryActions: classified.recoveryActions,
             // Include formatted text for backward compatibility
             _formattedMessage: errorMessage,
           }),
@@ -1595,4 +1606,142 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
       abortController?.abort();
     },
   });
+}
+
+// ── Provider Connection Test ─────────────────────────────────────
+
+export interface ConnectionTestResult {
+  success: boolean;
+  error?: {
+    code: string;
+    message: string;
+    suggestion: string;
+    recoveryActions?: Array<{ label: string; url?: string; action?: string }>;
+  };
+}
+
+/**
+ * Test a provider connection by sending a direct HTTP request to the API endpoint.
+ * Bypasses the Claude Code SDK subprocess entirely to avoid false positives
+ * from keychain/OAuth credentials leaking into the test.
+ */
+export async function testProviderConnection(config: {
+  apiKey: string;
+  baseUrl: string;
+  protocol: string;
+  authStyle: string;
+  envOverrides?: Record<string, string>;
+  modelName?: string;
+  presetKey?: string;
+  providerName?: string;
+  providerMeta?: { apiKeyUrl?: string; docsUrl?: string; pricingUrl?: string };
+}): Promise<ConnectionTestResult> {
+  const { getPreset, findPresetForLegacy } = await import('./provider-catalog');
+
+  // Look up preset for default model
+  const preset = config.presetKey
+    ? getPreset(config.presetKey)
+    : (config.baseUrl ? findPresetForLegacy(config.baseUrl, 'custom', config.protocol as import('./provider-catalog').Protocol) : undefined);
+
+  // Determine model to use in test request
+  const model = config.modelName
+    || preset?.defaultRoleModels?.default
+    || (preset?.defaultModels?.[0]?.upstreamModelId || preset?.defaultModels?.[0]?.modelId)
+    || 'sonnet';
+
+  // For bedrock/vertex/env_only protocols, we can't do a simple HTTP test
+  if (config.protocol === 'bedrock' || config.protocol === 'vertex' || config.authStyle === 'env_only') {
+    return {
+      success: false,
+      error: { code: 'SKIPPED', message: 'Cloud providers (Bedrock/Vertex) require IAM or OAuth credentials — connection test is not available for this provider type', suggestion: 'Save the configuration and send a message to verify' },
+    };
+  }
+
+  // Build the API URL — Anthropic-compatible endpoint
+  let apiUrl = config.baseUrl || 'https://api.anthropic.com';
+  // Ensure URL ends with /v1/messages for Anthropic-compatible providers
+  if (!apiUrl.endsWith('/v1/messages')) {
+    apiUrl = apiUrl.replace(/\/+$/, '');
+    if (!apiUrl.endsWith('/v1')) {
+      apiUrl += '/v1';
+    }
+    apiUrl += '/messages';
+  }
+
+  // Build headers based on auth style
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'anthropic-version': '2023-06-01',
+  };
+  if (config.authStyle === 'auth_token') {
+    headers['Authorization'] = `Bearer ${config.apiKey}`;
+  } else {
+    headers['x-api-key'] = config.apiKey;
+  }
+
+  // Minimal request body — just enough to verify auth + endpoint
+  const body = JSON.stringify({
+    model,
+    max_tokens: 1,
+    messages: [{ role: 'user', content: 'ping' }],
+  });
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15_000);
+
+  try {
+    const response = await fetch(apiUrl, {
+      method: 'POST',
+      headers,
+      body,
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    // 2xx = success (even if model returns an error in body, auth works)
+    if (response.ok) {
+      return { success: true };
+    }
+
+    // Parse error response
+    let errorBody = '';
+    try { errorBody = await response.text(); } catch { /* ignore */ }
+
+    const classified = classifyError({
+      error: new Error(`HTTP ${response.status}: ${errorBody.slice(0, 500)}`),
+      providerName: config.providerName,
+      baseUrl: config.baseUrl,
+      providerMeta: config.providerMeta,
+    });
+
+    return {
+      success: false,
+      error: {
+        code: classified.category,
+        message: classified.userMessage,
+        suggestion: classified.actionHint,
+        recoveryActions: classified.recoveryActions,
+      },
+    };
+  } catch (err) {
+    clearTimeout(timeoutId);
+
+    // Network errors (ECONNREFUSED, ENOTFOUND, timeout, etc.)
+    const classified = classifyError({
+      error: err,
+      providerName: config.providerName,
+      baseUrl: config.baseUrl,
+      providerMeta: config.providerMeta,
+    });
+
+    return {
+      success: false,
+      error: {
+        code: classified.category,
+        message: classified.userMessage,
+        suggestion: classified.actionHint,
+        recoveryActions: classified.recoveryActions,
+      },
+    };
+  }
 }
