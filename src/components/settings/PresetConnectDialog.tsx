@@ -401,9 +401,9 @@ export function PresetConnectDialog({
               </a>
             </div>
             {preset.meta.notes && preset.meta.notes.length > 0 && (
-              <div className="rounded-md bg-amber-500/10 border border-amber-500/20 px-3 py-2 space-y-1">
+              <div className="rounded-md bg-amber-500/10 border border-amber-500/20 px-3 py-2 space-y-1"> {/* lint-allow-raw-color */}
                 {preset.meta.notes.map((note, i) => (
-                  <p key={i} className="text-[11px] text-amber-600 dark:text-amber-400 flex items-start gap-1.5">
+                  <p key={i} className="text-[11px] text-amber-600 dark:text-amber-400 flex items-start gap-1.5"> {/* lint-allow-raw-color */}
                     <Warning size={12} className="shrink-0 mt-0.5" />
                     {note}
                   </p>
@@ -509,14 +509,14 @@ export function PresetConnectDialog({
               {preset.key === "anthropic-thirdparty" && baseUrl && (() => {
                 const inferred = inferAuthStyleFromUrl(baseUrl);
                 return inferred && inferred !== authStyle ? (
-                  <p className="text-[11px] text-amber-500">
+                  <p className="text-[11px] text-amber-500"> {/* lint-allow-raw-color */}
                     {isZh
                       ? `检测到此 URL 通常使用 ${inferred === 'auth_token' ? 'Auth Token' : 'API Key'} 认证方式`
                       : `This URL typically uses ${inferred === 'auth_token' ? 'Auth Token' : 'API Key'} authentication`}
                     {' '}
                     <Button
                       variant="link"
-                      className="h-auto p-0 text-[11px] text-amber-500 underline hover:no-underline"
+                      className={"h-auto p-0 text-[11px] text-amber-500 underline hover:no-underline" /* lint-allow-raw-color */}
                       onClick={() => setAuthStyle(inferred)}
                     >
                       {isZh ? '切换' : 'Switch'}
