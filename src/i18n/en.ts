@@ -17,6 +17,7 @@ const en = {
   'nav.skills': 'Skills',
   'nav.mcp': 'MCP',
   'nav.gallery': 'Gallery',
+  'nav.scheduledTasks': 'Scheduled Tasks',
 
   // ── Chat list panel ─────────────────────────────────────────
   'chatList.justNow': 'just now',
@@ -1005,6 +1006,7 @@ const en = {
   'assistant.taskPrompt': 'Prompt',
   'assistant.taskPriority': 'Priority',
   'assistant.taskNotify': 'Notify on complete',
+  'assistant.taskCreate': 'New Task',
 
   // ── Composer ──────────────────────────────────────────────
   'composer.slashCommand': 'Commands',

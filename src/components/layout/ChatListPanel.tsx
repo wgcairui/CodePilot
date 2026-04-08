@@ -15,6 +15,7 @@ import {
   Image,
   WifiHigh,
   Gear,
+  Clock,
 } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -445,6 +446,7 @@ export function ChatListPanel({ open, width, hasUpdate, readyToInstall }: ChatLi
     { href: "/cli-tools", label: t('nav.cliTools' as TranslationKey), icon: Terminal },
     { href: "/gallery", label: t('nav.gallery' as TranslationKey), icon: Image },
     { href: "/bridge", label: t('nav.bridge' as TranslationKey), icon: WifiHigh },
+    { href: "/scheduled-tasks", label: t('nav.scheduledTasks' as TranslationKey), icon: Clock },
   ];
 
   return (

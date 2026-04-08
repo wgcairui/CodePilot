@@ -14,6 +14,7 @@ const zh: Record<TranslationKey, string> = {
   'nav.skills': 'Skills',
   'nav.mcp': 'MCP',
   'nav.gallery': '素材库',
+  'nav.scheduledTasks': '定时任务',
 
   // ── Chat list panel ─────────────────────────────────────────
   'chatList.justNow': '刚刚',
@@ -1002,6 +1003,7 @@ const zh: Record<TranslationKey, string> = {
   'assistant.taskPrompt': '提示词',
   'assistant.taskPriority': '优先级',
   'assistant.taskNotify': '完成时通知',
+  'assistant.taskCreate': '新建任务',
 
   // ── Composer ──────────────────────────────────────────────
   'composer.slashCommand': '命令',
