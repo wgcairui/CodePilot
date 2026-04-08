@@ -27,7 +27,7 @@ import {
   getDefaultProviderId,
 } from '../db';
 import { resolveProvider as resolveProviderUnified } from '../provider-resolver';
-import { loadCodePilotMcpServers } from '../mcp-loader';
+import { loadCodePilotMcpServers, loadAllMcpServers } from '../mcp-loader';
 import { assembleContext } from '../context-assembler';
 import crypto from 'crypto';
 
@@ -212,9 +212,13 @@ export async function processMessage(
       }
     }
 
-    // Load only MCP servers needing CodePilot-specific processing (${...} env placeholders).
-    // All other MCP servers are auto-loaded by the SDK via settingSources.
-    const mcpServers = loadCodePilotMcpServers();
+    // Load MCP servers — mirrors chat route logic:
+    // Non-Anthropic providers or native runtime need ALL servers;
+    // SDK runtime only needs placeholder-processed ones.
+    const isNonAnthropicBridge = effectiveProviderId === 'openai-oauth';
+    const cliEnabled = getSetting('cli_enabled') !== 'false';
+    const bridgeWillUseNative = isNonAnthropicBridge || !cliEnabled;
+    const mcpServers = bridgeWillUseNative ? loadAllMcpServers() : loadCodePilotMcpServers();
 
     // Unified context assembly — adds CLI tools context (and workspace prompt if applicable)
     const assembled = await assembleContext({

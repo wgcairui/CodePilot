@@ -255,12 +255,14 @@ export async function POST(request: NextRequest) {
     // Load MCP servers for the active runtime:
     // - SDK Runtime: only needs servers with ${...} env placeholders (SDK loads the rest via settingSources)
     // - Native Runtime: needs ALL servers (it manages MCP connections independently)
+    // Mirrors resolveRuntime() logic: non-Anthropic providers force native; auto prefers SDK if CLI available
     const runtimeSetting = getSetting('agent_runtime') || 'auto';
     const isNonAnthropicProvider = effectiveProviderId === 'openai-oauth';
-    const isNativeRuntime = isNonAnthropicProvider ||
+    const cliEnabled = getSetting('cli_enabled') !== 'false';
+    const willUseNative = isNonAnthropicProvider ||
       runtimeSetting === 'native' ||
-      (runtimeSetting === 'auto' && getSetting('cli_enabled') === 'false');
-    const mcpServers = isNativeRuntime ? loadAllMcpServers() : loadCodePilotMcpServers();
+      (!cliEnabled); // auto + no CLI = native
+    const mcpServers = willUseNative ? loadAllMcpServers() : loadCodePilotMcpServers();
 
     // ── Context compression check ───────────────────────────────────
     // Estimate next-turn context size and compress if over threshold.

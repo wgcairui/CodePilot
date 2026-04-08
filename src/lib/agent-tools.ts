@@ -34,10 +34,17 @@ export interface AssembleToolsOptions {
   };
 }
 
+export interface AssembleToolsResult {
+  tools: ToolSet;
+  /** System prompt snippets from builtin tool groups (notification, media, etc.) */
+  systemPrompts: string[];
+}
+
 /**
  * Assemble the tool set for the native Agent Loop.
+ * Returns both tools and their associated system prompt snippets.
  */
-export function assembleTools(options: AssembleToolsOptions = {}): ToolSet {
+export function assembleTools(options: AssembleToolsOptions = {}): AssembleToolsResult {
   const cwd = options.workingDirectory || process.cwd();
 
   // Built-in coding tools — pass permission context through so sub-agents
@@ -53,14 +60,13 @@ export function assembleTools(options: AssembleToolsOptions = {}): ToolSet {
   // In 'plan' mode, restrict to read-only tools
   if (options.mode === 'plan') {
     return {
-      Read: builtinTools.Read,
-      Glob: builtinTools.Glob,
-      Grep: builtinTools.Grep,
+      tools: { Read: builtinTools.Read, Glob: builtinTools.Glob, Grep: builtinTools.Grep },
+      systemPrompts: [],
     };
   }
 
   // Built-in MCP-equivalent tools (notification, memory, dashboard, etc.)
-  const { tools: builtinMcpTools } = getBuiltinTools({
+  const { tools: builtinMcpTools, systemPrompts } = getBuiltinTools({
     workspacePath: cwd,
     prompt: options.prompt,
   });
@@ -72,10 +78,10 @@ export function assembleTools(options: AssembleToolsOptions = {}): ToolSet {
 
   // Wrap with permission checks if context provided
   if (options.permissionContext) {
-    return wrapWithPermissions(allTools, options.permissionContext);
+    return { tools: wrapWithPermissions(allTools, options.permissionContext), systemPrompts };
   }
 
-  return allTools;
+  return { tools: allTools, systemPrompts };
 }
 
 // ── Permission wrapper ──────────────────────────────────────────

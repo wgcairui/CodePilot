@@ -124,19 +124,33 @@ export function runAgentLoop(options: AgentLoopOptions): ReadableStream<string> 
 
         // 0b. Assemble tools with permission context (needs controller for SSE emission)
         // When bypassPermissions is true (full_access profile), skip permission wrapping entirely.
-        const tools = toolsOverride || assembleTools({
-          workingDirectory: workingDirectory || process.cwd(),
-          prompt,
-          mode: permissionMode,
-          permissionContext: bypassPermissions ? undefined : {
-            sessionId,
-            permissionMode: (permissionMode || 'normal') as PermissionMode,
-            emitSSE: (event) => {
-              try { controller.enqueue(formatSSE(event as SSEEvent)); } catch { /* stream closed */ }
+        let tools: import('ai').ToolSet;
+        let toolSystemPrompts: string[] = [];
+        if (toolsOverride) {
+          tools = toolsOverride;
+        } else {
+          const assembled = assembleTools({
+            workingDirectory: workingDirectory || process.cwd(),
+            prompt,
+            mode: permissionMode,
+            permissionContext: bypassPermissions ? undefined : {
+              sessionId,
+              permissionMode: (permissionMode || 'normal') as PermissionMode,
+              emitSSE: (event) => {
+                try { controller.enqueue(formatSSE(event as SSEEvent)); } catch { /* stream closed */ }
+              },
+              abortSignal: abortController.signal,
             },
-            abortSignal: abortController.signal,
-          },
-        });
+          });
+          tools = assembled.tools;
+          toolSystemPrompts = assembled.systemPrompts;
+        }
+
+        // Augment system prompt with tool-specific context snippets
+        // (notification hints, media capabilities, dashboard usage, etc.)
+        const effectiveSystemPrompt = toolSystemPrompts.length > 0 && systemPrompt
+          ? systemPrompt + '\n\n' + toolSystemPrompts.join('\n\n')
+          : systemPrompt;
 
         // 1. Create model
         const { languageModel, modelId, config, isThirdPartyProxy } = createModel({
@@ -235,7 +249,7 @@ export function runAgentLoop(options: AgentLoopOptions): ReadableStream<string> 
             providerOptions = {
               ...providerOptions,
               openai: {
-                ...(systemPrompt ? { instructions: systemPrompt } : {}),
+                ...(effectiveSystemPrompt ? { instructions: effectiveSystemPrompt } : {}),
                 store: false,
                 reasoningEffort: 'medium',
                 textVerbosity: 'medium',
@@ -256,7 +270,7 @@ export function runAgentLoop(options: AgentLoopOptions): ReadableStream<string> 
           // Call streamText (single step — we control the loop)
           const result = streamText({
             model: languageModel,
-            system: systemPrompt,
+            system: effectiveSystemPrompt,
             messages: prunedMessages,
             tools: hasTools ? tools : undefined,
             // activeTools: limit available tools in plan mode (AI SDK feature)
