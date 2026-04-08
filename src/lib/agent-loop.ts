@@ -242,6 +242,9 @@ export function runAgentLoop(options: AgentLoopOptions): ReadableStream<string> 
                 store: false,
                 // Reasoning effort (for reasoning models like o-series)
                 ...(openaiEffort ? { reasoningEffort: openaiEffort } : {}),
+                // Reasoning summary — enables thinking process visibility
+                // 'auto' returns reasoning when the model uses it
+                reasoningSummary: 'auto',
                 // Text verbosity — maps effort to output detail level
                 textVerbosity: openaiEffort || 'medium',
               },
