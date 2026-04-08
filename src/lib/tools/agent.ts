@@ -59,6 +59,9 @@ export function createAgentTool(ctx: {
         : undefined;
       const { tools: allTools } = assembleTools({
         workingDirectory: ctx.workingDirectory,
+        providerId: ctx.providerId,
+        sessionProviderId: ctx.sessionProviderId,
+        model: ctx.parentModel,
         permissionContext,
       });
       const subTools = filterTools(allTools, agentDef.allowedTools, agentDef.disallowedTools);
