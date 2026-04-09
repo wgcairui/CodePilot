@@ -55,6 +55,12 @@ export interface FilePreview {
   line_count_exact: boolean;
 }
 
+export interface FileWriteRequest {
+  path: string;
+  content: string;
+  baseDir: string;
+}
+
 // ==========================================
 // Skill / Command Types
 // ==========================================
