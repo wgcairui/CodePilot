@@ -208,6 +208,13 @@ const zh: Record<TranslationKey, string> = {
   'filePreview.linesApprox': '约 {count} 行',
   'filePreview.copyPath': '复制路径',
   'filePreview.failedToLoad': '加载文件失败',
+  'filePreview.edit': '编辑',
+  'filePreview.viewMode': '预览',
+  'filePreview.save': '保存',
+  'filePreview.saving': '保存中…',
+  'filePreview.saved': '已保存',
+  'filePreview.unsavedChanges': '有未保存的更改',
+  'filePreview.saveError': '保存失败',
 
   // ── Doc preview ─────────────────────────────────────────────
   'docPreview.htmlPreview': 'HTML 预览',

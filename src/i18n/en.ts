@@ -211,6 +211,13 @@ const en = {
   'filePreview.linesApprox': '~{count} lines',
   'filePreview.copyPath': 'Copy path',
   'filePreview.failedToLoad': 'Failed to load file',
+  'filePreview.edit': 'Edit',
+  'filePreview.viewMode': 'View',
+  'filePreview.save': 'Save',
+  'filePreview.saving': 'Saving…',
+  'filePreview.saved': 'Saved',
+  'filePreview.unsavedChanges': 'Unsaved changes',
+  'filePreview.saveError': 'Failed to save',
 
   // ── Doc preview ─────────────────────────────────────────────
   'docPreview.htmlPreview': 'HTML Preview',
