@@ -756,6 +756,12 @@ function migrateDb(db: Database.Database): void {
     safeAddColumn(db, "ALTER TABLE channel_permission_links ADD COLUMN resolved INTEGER NOT NULL DEFAULT 0");
   }
 
+  // Add provider_id to channel_bindings for per-binding provider override
+  const bindingCols = db.prepare("PRAGMA table_info(channel_bindings)").all() as { name: string }[];
+  if (bindingCols.length > 0 && !bindingCols.map(c => c.name).includes('provider_id')) {
+    safeAddColumn(db, "ALTER TABLE channel_bindings ADD COLUMN provider_id TEXT NOT NULL DEFAULT ''");
+  }
+
   // Channel configs table (structured config for channel plugins)
   db.exec(`
     CREATE TABLE IF NOT EXISTS channel_configs (
@@ -2083,7 +2089,7 @@ export function getChannelBinding(channelType: ChannelType, chatId: string): Cha
   ).get(channelType, chatId) as {
     id: string; channel_type: string; chat_id: string; codepilot_session_id: string;
     sdk_session_id: string; working_directory: string; model: string; mode: string;
-    active: number; created_at: string; updated_at: string;
+    provider_id: string; active: number; created_at: string; updated_at: string;
   } | undefined;
   if (!row) return undefined;
   return {
@@ -2095,6 +2101,7 @@ export function getChannelBinding(channelType: ChannelType, chatId: string): Cha
     workingDirectory: row.working_directory,
     model: row.model,
     mode: row.mode as 'code' | 'plan' | 'ask',
+    providerId: row.provider_id || undefined,
     active: row.active === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -2109,6 +2116,7 @@ export function upsertChannelBinding(params: {
   workingDirectory?: string;
   model?: string;
   mode?: 'code' | 'plan' | 'ask';
+  providerId?: string;
 }): ChannelBinding {
   const db = getDb();
   const now = new Date().toISOString().replace('T', ' ').split('.')[0];
@@ -2116,7 +2124,7 @@ export function upsertChannelBinding(params: {
 
   if (existing) {
     db.prepare(
-      `UPDATE channel_bindings SET codepilot_session_id = ?, sdk_session_id = ?, working_directory = ?, model = ?, mode = ?, updated_at = ?
+      `UPDATE channel_bindings SET codepilot_session_id = ?, sdk_session_id = ?, working_directory = ?, model = ?, mode = ?, provider_id = ?, updated_at = ?
        WHERE channel_type = ? AND chat_id = ?`
     ).run(
       params.codepilotSessionId,
@@ -2124,6 +2132,7 @@ export function upsertChannelBinding(params: {
       params.workingDirectory ?? existing.workingDirectory,
       params.model ?? existing.model,
       params.mode ?? existing.mode,
+      params.providerId ?? existing.providerId ?? '',
       now,
       params.channelType,
       params.chatId,
@@ -2131,8 +2140,8 @@ export function upsertChannelBinding(params: {
   } else {
     const id = crypto.randomBytes(16).toString('hex');
     db.prepare(
-      `INSERT INTO channel_bindings (id, channel_type, chat_id, codepilot_session_id, sdk_session_id, working_directory, model, mode, active, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`
+      `INSERT INTO channel_bindings (id, channel_type, chat_id, codepilot_session_id, sdk_session_id, working_directory, model, mode, provider_id, active, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`
     ).run(
       id,
       params.channelType,
@@ -2142,6 +2151,7 @@ export function upsertChannelBinding(params: {
       params.workingDirectory || '',
       params.model || '',
       params.mode || 'code',
+      params.providerId || '',
       now,
       now,
     );
@@ -2155,7 +2165,7 @@ export function listChannelBindings(channelType?: ChannelType): ChannelBinding[]
   let rows: Array<{
     id: string; channel_type: string; chat_id: string; codepilot_session_id: string;
     sdk_session_id: string; working_directory: string; model: string; mode: string;
-    active: number; created_at: string; updated_at: string;
+    provider_id: string; active: number; created_at: string; updated_at: string;
   }>;
 
   if (channelType) {
@@ -2173,6 +2183,7 @@ export function listChannelBindings(channelType?: ChannelType): ChannelBinding[]
     workingDirectory: row.working_directory,
     model: row.model,
     mode: row.mode as 'code' | 'plan' | 'ask',
+    providerId: row.provider_id || undefined,
     active: row.active === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -2181,7 +2192,7 @@ export function listChannelBindings(channelType?: ChannelType): ChannelBinding[]
 
 export function updateChannelBinding(
   id: string,
-  updates: Partial<Pick<ChannelBinding, 'sdkSessionId' | 'workingDirectory' | 'model' | 'mode' | 'active'>>,
+  updates: Partial<Pick<ChannelBinding, 'sdkSessionId' | 'workingDirectory' | 'model' | 'mode' | 'providerId' | 'active'>>,
 ): void {
   const db = getDb();
   const now = new Date().toISOString().replace('T', ' ').split('.')[0];
@@ -2192,6 +2203,7 @@ export function updateChannelBinding(
   if (updates.workingDirectory !== undefined) { sets.push('working_directory = ?'); values.push(updates.workingDirectory); }
   if (updates.model !== undefined) { sets.push('model = ?'); values.push(updates.model); }
   if (updates.mode !== undefined) { sets.push('mode = ?'); values.push(updates.mode); }
+  if (updates.providerId !== undefined) { sets.push('provider_id = ?'); values.push(updates.providerId); }
   if (updates.active !== undefined) { sets.push('active = ?'); values.push(updates.active ? 1 : 0); }
 
   values.push(id);
