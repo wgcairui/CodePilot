@@ -1163,6 +1163,10 @@ const en = {
   // ── Top Bar ───────────────────────────────────────────────────
   'topBar.fileTree': 'File Tree',
   'topBar.git': 'Git',
+  'topBar.switchBranch': 'Switch Branch',
+  'topBar.searchBranch': 'Search branches...',
+  'topBar.sortByDate': 'By date',
+  'topBar.sortByName': 'By name',
   'topBar.dashboard': 'Dashboard',
   'topBar.commit': 'Commit All',
   'topBar.push': 'Push',
@@ -1246,6 +1250,7 @@ const en = {
   'git.deleted': 'Deleted',
   'git.renamed': 'Renamed',
   'git.loading': 'Loading...',
+  'git.checkingOut': 'Checking out...',
   'git.refresh': 'Refresh',
   'git.error': 'Git error',
   'git.current': 'current',

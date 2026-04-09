@@ -1160,6 +1160,10 @@ const zh: Record<TranslationKey, string> = {
   // ── Top Bar ───────────────────────────────────────────────────
   'topBar.fileTree': '文件树',
   'topBar.git': 'Git',
+  'topBar.switchBranch': '切换分支',
+  'topBar.searchBranch': '搜索分支...',
+  'topBar.sortByDate': '按日期',
+  'topBar.sortByName': '按名称',
   'topBar.dashboard': '看板',
   'topBar.commit': '提交全部',
   'topBar.push': '推送',
@@ -1243,6 +1247,7 @@ const zh: Record<TranslationKey, string> = {
   'git.deleted': '已删除',
   'git.renamed': '已重命名',
   'git.loading': '加载中...',
+  'git.checkingOut': '切换中...',
   'git.refresh': '刷新',
   'git.error': 'Git 错误',
   'git.current': '当前',

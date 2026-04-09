@@ -1155,6 +1155,7 @@ export interface GitBranch {
   isRemote: boolean;
   upstream: string;
   worktreePath: string;
+  lastCommitDate?: string; // ISO 8601, e.g. "2024-01-15T10:30:00+08:00"
 }
 
 export interface GitLogEntry {

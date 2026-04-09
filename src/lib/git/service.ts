@@ -140,7 +140,7 @@ function parseStatusChar(c: string): GitChangedFile['status'] {
 
 export async function getBranches(cwd: string): Promise<GitBranch[]> {
   const output = await runGit(
-    ['branch', '-a', '--format=%(refname:short)\t%(upstream:short)\t%(worktreepath)'],
+    ['branch', '-a', '--format=%(refname:short)\t%(upstream:short)\t%(worktreepath)\t%(committerdate:iso8601)'],
     { cwd }
   );
 
@@ -156,7 +156,7 @@ export async function getBranches(cwd: string): Promise<GitBranch[]> {
   const branches: GitBranch[] = [];
   for (const line of output.split('\n')) {
     if (!line.trim()) continue;
-    const [name, upstream, worktreePath] = line.split('\t');
+    const [name, upstream, worktreePath, lastCommitDate] = line.split('\t');
     const trimmedName = name.trim();
     // A branch is remote only if it starts with "origin/" (or other remote prefix)
     // AND is NOT in the local branch list
@@ -166,6 +166,7 @@ export async function getBranches(cwd: string): Promise<GitBranch[]> {
       isRemote,
       upstream: upstream?.trim() || '',
       worktreePath: worktreePath?.trim() || '',
+      lastCommitDate: lastCommitDate?.trim() || undefined,
     });
   }
 
