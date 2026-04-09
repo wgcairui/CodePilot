@@ -155,7 +155,7 @@ export function FilePreview({ filePath, onBack }: FilePreviewProps) {
         <Button
           variant="ghost"
           size="icon-sm"
-          onClick={mode === "view" ? handleEnterEdit : () => { setMode("view"); setIsDirty(false); }}
+          onClick={mode === "view" ? handleEnterEdit : () => { setMode("view"); setIsDirty(false); setEditContent(""); }}
           title={mode === "view" ? t("filePreview.edit") : t("filePreview.viewMode")}
         >
           {mode === "view" ? <PencilSimple size={14} /> : <Eye size={14} />}
