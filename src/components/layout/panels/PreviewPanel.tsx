@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
+import dynamic from "next/dynamic";
 import { useTheme } from "next-themes";
-import { X, Copy, Check, SpinnerGap } from "@/components/ui/icon";
+import { X, Copy, Check, SpinnerGap, PencilSimple, Eye } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import { Light as SyntaxHighlighter } from "react-syntax-highlighter";
 import { useThemeFamily } from "@/lib/theme/context";
@@ -11,6 +12,11 @@ import { usePanel } from "@/hooks/usePanel";
 import { useTranslation } from "@/hooks/useTranslation";
 import { ResizeHandle } from "@/components/layout/ResizeHandle";
 import type { FilePreview as FilePreviewType } from "@/types";
+
+const CodeMirrorEditor = dynamic(
+  () => import("@/components/project/CodeMirrorEditor").then((m) => ({ default: m.CodeMirrorEditor })),
+  { ssr: false }
+);
 
 // Lazy-load Streamdown and plugins — only loaded when rendered markdown is needed
 let _StreamdownComponent: typeof import("streamdown").Streamdown | null = null;
@@ -88,12 +94,17 @@ const PREVIEW_DEFAULT_WIDTH = 480;
 export function PreviewPanel() {
   const { resolvedTheme } = useTheme();
   const { workingDirectory, sessionId, previewFile, setPreviewFile, previewViewMode, setPreviewViewMode, setPreviewOpen } = usePanel();
+  const { t } = useTranslation();
   const isDark = resolvedTheme === "dark";
   const [preview, setPreview] = useState<FilePreviewType | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [width, setWidth] = useState(PREVIEW_DEFAULT_WIDTH);
+  const [mode, setMode] = useState<"view" | "edit">("view");
+  const [editContent, setEditContent] = useState<string>("");
+  const [isDirty, setIsDirty] = useState(false);
+  const [saveStatus, setSaveStatus] = useState<"idle" | "saving" | "saved" | "error">("idle");
 
   const handleResize = useCallback((delta: number) => {
     // Left-side handle: dragging left (negative delta) = wider
@@ -153,6 +164,63 @@ export function PreviewPanel() {
     setPreviewOpen(false);
   };
 
+  // Reset edit mode when switching to a different file
+  useEffect(() => {
+    setMode("view");
+    setIsDirty(false);
+    setEditContent("");
+    setSaveStatus("idle");
+  }, [filePath]);
+
+  const handleEnterEdit = useCallback(async () => {
+    const res = await fetch(
+      `/api/files/raw?path=${encodeURIComponent(filePath)}${workingDirectory ? `&baseDir=${encodeURIComponent(workingDirectory)}` : ""}`
+    );
+    if (!res.ok) return;
+    const text = await res.text();
+    setEditContent(text);
+    setIsDirty(false);
+    setSaveStatus("idle");
+    setMode("edit");
+  }, [filePath, workingDirectory]);
+
+  const handleSave = useCallback(async () => {
+    if (!isDirty) return;
+    if (!workingDirectory) {
+      setSaveStatus("error");
+      setTimeout(() => setSaveStatus("idle"), 3000);
+      return;
+    }
+    setSaveStatus("saving");
+    try {
+      const res = await fetch("/api/files/write", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ path: filePath, content: editContent, baseDir: workingDirectory }),
+      });
+      if (!res.ok) throw new Error("write failed");
+      setIsDirty(false);
+      setSaveStatus("saved");
+      setTimeout(() => setSaveStatus("idle"), 2000);
+    } catch {
+      setSaveStatus("error");
+      setTimeout(() => setSaveStatus("idle"), 3000);
+    }
+  }, [isDirty, workingDirectory, filePath, editContent]);
+
+  // ⌘S / Ctrl+S keyboard shortcut for saving in edit mode
+  useEffect(() => {
+    if (mode !== "edit") return;
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "s") {
+        e.preventDefault();
+        handleSave();
+      }
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [mode, handleSave]);
+
   const fileName = filePath.split("/").pop() || filePath;
 
   const breadcrumb = useMemo(() => {
@@ -184,11 +252,42 @@ export function PreviewPanel() {
           <p className="truncate text-sm font-medium">{fileName}</p>
         </div>
 
-        {canRender && !isMedia && (
+        {canRender && !isMedia && mode === "view" && (
           <ViewModeToggle value={previewViewMode} onChange={setPreviewViewMode} />
         )}
 
         {!isMedia && (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={mode === "view" ? handleEnterEdit : () => { setMode("view"); setIsDirty(false); setEditContent(""); }}
+            title={mode === "view" ? t("filePreview.edit") : t("filePreview.viewMode")}
+          >
+            {mode === "view" ? <PencilSimple size={14} /> : <Eye size={14} />}
+          </Button>
+        )}
+
+        {mode === "edit" && (
+          <Button
+            variant={isDirty ? "default" : "ghost"}
+            size="sm"
+            onClick={handleSave}
+            disabled={saveStatus === "saving" || !isDirty}
+            className="h-6 px-2 text-xs"
+          >
+            {saveStatus === "saving"
+              ? t("filePreview.saving")
+              : saveStatus === "saved"
+              ? t("filePreview.saved")
+              : saveStatus === "error"
+              ? t("filePreview.saveError")
+              : isDirty
+              ? `· ${t("filePreview.save")}`
+              : t("filePreview.save")}
+          </Button>
+        )}
+
+        {!isMedia && mode === "view" && (
           <Button variant="ghost" size="icon-sm" onClick={handleCopyContent}>
             {copied ? (
               <Check size={14} className="text-status-success-foreground" />
@@ -215,28 +314,48 @@ export function PreviewPanel() {
             {preview.language}
           </span>
         )}
+        {mode === "edit" && isDirty && (
+          <span className="shrink-0 text-[10px] text-status-warning-foreground">
+            {t("filePreview.unsavedChanges")}
+          </span>
+        )}
       </div>
 
       {/* Content */}
-      <div className="flex-1 min-h-0 overflow-auto">
-        {isMedia ? (
-          <MediaView filePath={filePath} fileServeUrl={fileServeUrl} />
-        ) : loading ? (
-          <div className="flex items-center justify-center py-12">
-            <SpinnerGap size={20} className="animate-spin text-muted-foreground" />
-          </div>
-        ) : error ? (
-          <div className="px-4 py-8 text-center">
-            <p className="text-sm text-destructive">{error}</p>
-          </div>
-        ) : preview ? (
-          previewViewMode === "rendered" && canRender ? (
-            <RenderedView content={preview.content} filePath={filePath} />
-          ) : (
-            <SourceView preview={preview} isDark={isDark} />
-          )
-        ) : null}
-      </div>
+      {mode === "edit" ? (
+        <div className="flex-1 min-h-0 overflow-hidden">
+          <CodeMirrorEditor
+            value={editContent}
+            onChange={(val) => {
+              setEditContent(val);
+              setIsDirty(true);
+            }}
+            language={preview?.language ?? ""}
+            isDark={isDark}
+            className="h-full"
+          />
+        </div>
+      ) : (
+        <div className="flex-1 min-h-0 overflow-auto">
+          {isMedia ? (
+            <MediaView filePath={filePath} fileServeUrl={fileServeUrl} />
+          ) : loading ? (
+            <div className="flex items-center justify-center py-12">
+              <SpinnerGap size={20} className="animate-spin text-muted-foreground" />
+            </div>
+          ) : error ? (
+            <div className="px-4 py-8 text-center">
+              <p className="text-sm text-destructive">{error}</p>
+            </div>
+          ) : preview ? (
+            previewViewMode === "rendered" && canRender ? (
+              <RenderedView content={preview.content} filePath={filePath} />
+            ) : (
+              <SourceView preview={preview} isDark={isDark} />
+            )
+          ) : null}
+        </div>
+      )}
       </div>
     </div>
   );
