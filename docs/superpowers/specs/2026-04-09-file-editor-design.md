@@ -1,71 +1,71 @@
-# File Editor Design
+# 文件编辑器设计方案
 
-**Date:** 2026-04-09  
-**Status:** Approved
+**日期：** 2026-04-09  
+**状态：** 已确认
 
-## Overview
+## 概述
 
-Add inline editing capability to the existing file browser's `FilePreview` component. Users can toggle between read-only view (current behavior) and edit mode powered by CodeMirror 6.
+在现有文件浏览器的 `FilePreview` 组件中添加内联编辑能力。用户可在只读预览（现有行为）和基于 CodeMirror 6 的编辑模式之间切换。
 
-## Goals
+## 目标
 
-- Lightweight: use CodeMirror 6 with per-language lazy loading
-- Non-destructive: preserve existing read-only view, toggled via button
-- Save via button click and ⌘S keyboard shortcut
-- Reuse existing security model (`isPathSafe` + `isRootPath`)
+- 轻量：使用 CodeMirror 6，按语言懒加载扩展包
+- 非破坏性：保留现有只读视图，通过按钮切换
+- 支持按钮点击和 ⌘S 快捷键保存
+- 复用现有安全模型（`isPathSafe` + `isRootPath`）
 
-## Architecture
+## 架构
 
 ```
-FilePreview.tsx (extended)
+FilePreview.tsx（扩展）
   ├── mode: 'view' | 'edit'
-  ├── view mode: SyntaxHighlighter (unchanged)
-  └── edit mode: CodeMirrorEditor (new, lazy-loaded)
+  ├── 视图模式：SyntaxHighlighter（不变）
+  └── 编辑模式：CodeMirrorEditor（新增，懒加载）
 
-src/components/project/CodeMirrorEditor.tsx (new)
-  └── @uiw/react-codemirror wrapper, language extensions loaded per file type
+src/components/project/CodeMirrorEditor.tsx（新增）
+  └── @uiw/react-codemirror 封装，按文件类型加载语言扩展
 
-src/app/api/files/write/route.ts (new)
-  └── POST { path, content, baseDir } → fs.writeFile with safety checks
+src/app/api/files/write/route.ts（新增）
+  └── POST { path, content, baseDir } → fs.writeFile + 安全校验
 
-src/app/api/files/raw/route.ts (modified)
-  └── Remove inline isPathSafe; import isPathSafe + isRootPath from @/lib/files
-  └── Add baseDir query param + same two-branch security as preview route
+src/app/api/files/raw/route.ts（修改）
+  └── 移除内联 isPathSafe，改从 @/lib/files 导入 isPathSafe + isRootPath
+  └── 新增 baseDir 查询参数，与 preview 路由保持一致的双分支安全模型
 
-src/types/index.ts (modified)
-  └── Add FileWriteRequest interface
+src/types/index.ts（修改）
+  └── 新增 FileWriteRequest 接口
 ```
 
-## Component Changes
+## 组件变更
 
 ### `FilePreview.tsx`
 
-- Add `mode: 'view' | 'edit'` state
-- Add `isDirty: boolean` state (content differs from saved version)
-- Header row: add Edit/View toggle button (right side)
-- Edit mode header additions:
-  - `·` dot indicator when `isDirty`
-  - Save button (highlighted when dirty)
-- On entering edit mode: fetch full file content via `/api/files/raw?path=...&baseDir=...`
-  - The current `/api/files/preview` truncates at 200 lines — raw endpoint returns the full file
-  - `baseDir` must be passed (required by the updated raw route security model)
-- ⌘S handler:
-  - Use `useEffect` with `[mode, handleSave]` as dependencies
-  - Guard in effect condition: only attach listener when `mode === 'edit'`
-  - Pattern: `useEffect(() => { if (mode !== 'edit') return; const handler = ...; document.addEventListener('keydown', handler); return () => document.removeEventListener('keydown', handler); }, [mode, handleSave])`
-  - Inside handler: call `e.preventDefault()` to suppress browser native save dialog
-- On save: `POST /api/files/write` with `{ path, content, baseDir }`, reset `isDirty` on success
+- 新增 `mode: 'view' | 'edit'` 状态
+- 新增 `isDirty: boolean` 状态（内容与已保存版本不同则为 true）
+- 头部右侧新增编辑/预览切换按钮
+- 编辑模式头部新增：
+  - `·` 脏状态指示点（`isDirty` 为 true 时显示）
+  - 保存按钮（有未保存更改时高亮）
+- 进入编辑模式时：通过 `/api/files/raw?path=...&baseDir=...` 获取完整文件内容
+  - 当前 `/api/files/preview` 最多读取 200 行；raw 端点返回完整内容
+  - 必须传 `baseDir`（raw 路由安全模型要求）
+- ⌘S 处理：
+  - 使用 `useEffect`，依赖项为 `[mode, handleSave]`
+  - 在 effect 条件中判断：仅当 `mode === 'edit'` 时挂载监听器
+  - 模式：`useEffect(() => { if (mode !== 'edit') return; const handler = ...; document.addEventListener('keydown', handler); return () => document.removeEventListener('keydown', handler); }, [mode, handleSave])`
+  - 处理函数内调用 `e.preventDefault()`，阻止浏览器原生保存对话框
+- 保存时：`POST /api/files/write`，body 为 `{ path, content, baseDir }`，成功后重置 `isDirty`
 
-### `CodeMirrorEditor.tsx` (new)
+### `CodeMirrorEditor.tsx`（新增）
 
-- Wrapped with `dynamic(() => import(...), { ssr: false })` to avoid SSR DOM errors
-- Uses `@uiw/react-codemirror` as the React wrapper
-- Theme: derive `isDark` from `useTheme().resolvedTheme === 'dark'`. Pass `isDark` as a prop to `CodeMirrorEditor`. Inside the editor, use `isDark ? oneDark : undefined` (where `oneDark` is imported from `@codemirror/theme-one-dark`) as the `theme` extension.
-  - Note: `useFilePreviewCodeTheme()` returns an `HljsStyle` object (`Record<string, CSSProperties>`) which is incompatible with CodeMirror's `theme` prop (expects a CodeMirror `Extension`). Do NOT pass it directly.
-- Language extensions loaded per file extension:
+- 用 `dynamic(() => import(...), { ssr: false })` 懒加载，避免 SSR 阶段 DOM 错误
+- 使用 `@uiw/react-codemirror` 作为 React 封装层
+- 主题：从 `useTheme().resolvedTheme === 'dark'` 派生 `isDark`，将其作为 prop 传入 `CodeMirrorEditor`。编辑器内使用 `isDark ? oneDark : undefined` 作为 theme 扩展（`oneDark` 从 `@codemirror/theme-one-dark` 导入）
+  - 注意：`useFilePreviewCodeTheme()` 返回的是 `HljsStyle` 对象（`Record<string, CSSProperties>`），与 CodeMirror `theme` prop 不兼容，**不能**直接传入
+- 按文件扩展名加载语言扩展：
 
-| Extension | Package |
-|-----------|---------|
+| 扩展名 | 包 |
+|--------|-----|
 | ts, tsx, js, jsx | `@codemirror/lang-javascript` |
 | py | `@codemirror/lang-python` |
 | json | `@codemirror/lang-json` |
@@ -75,34 +75,34 @@ src/types/index.ts (modified)
 | rs | `@codemirror/lang-rust` |
 | go | `@codemirror/lang-go` |
 | java | `@codemirror/lang-java` |
-| other | no language extension |
+| 其他 | 不加载语言扩展 |
 
-- Props: `value`, `onChange`, `language`, `isDark`, `className`
+- Props：`value`、`onChange`、`language`、`isDark`、`className`
 
-### `src/app/api/files/raw/route.ts` (modified)
+### `src/app/api/files/raw/route.ts`（修改）
 
-1. Remove the inline `isPathSafe` definition (lines 10–13)
-2. Import `isPathSafe` and `isRootPath` from `@/lib/files` (matching `preview/route.ts` pattern)
-3. Add `baseDir` query parameter with the same two-branch security model:
-   - If `baseDir` is provided: `isRootPath(baseDir)` check → `isPathSafe(baseDir, path)`
-   - If `baseDir` is absent: fall back to `isPathSafe(homeDir, path)`
+1. 移除文件内的内联 `isPathSafe` 定义（第 10–13 行）
+2. 从 `@/lib/files` 导入 `isPathSafe` 和 `isRootPath`（与 `preview/route.ts` 保持一致）
+3. 新增 `baseDir` 查询参数，实现双分支安全模型：
+   - 提供了 `baseDir`：执行 `isRootPath(baseDir)` 检查 → `isPathSafe(baseDir, path)`
+   - 未提供 `baseDir`：回退到 `isPathSafe(homeDir, path)`
 
-This is required so `FilePreview` can load full file content for editing in projects outside `homeDir`.
+此修改使 `FilePreview` 能在 `homeDir` 以外的项目中加载完整文件内容（Windows 不同盘符场景同样适用）。
 
-### `src/app/api/files/write/route.ts` (new)
+### `src/app/api/files/write/route.ts`（新增）
 
-- Method: `POST`
-- Body: `{ path: string, content: string, baseDir: string }` — `baseDir` is **required**
-- If `baseDir` is absent or empty: return `400 Bad Request`
-- Security: `isRootPath(baseDir)` check → `isPathSafe(baseDir, path)` (write is always scoped)
-- Content size limit: reject with `413` if `content.length` exceeds 10 MB
-  - Note: the raw route serves files larger than 10 MB via streaming, so a user could open a >10 MB file in the editor but be unable to save it. This is an accepted limitation — editing files >10 MB is an uncommon case for a side-panel editor.
-- On success: `{ success: true }`
-- No backup/versioning — Git is the safety net
+- 方法：`POST`
+- Body：`{ path: string, content: string, baseDir: string }`，`baseDir` **必填**
+- `baseDir` 缺失或为空时：返回 `400 Bad Request`
+- 安全校验：`isRootPath(baseDir)` → `isPathSafe(baseDir, path)`（写操作必须限定在项目范围内）
+- 内容大小限制：`content.length` 超过 10 MB 时返回 `413`
+  - 说明：raw 路由通过流式传输支持 >10 MB 的文件，因此用户可以打开大文件但无法保存。这是已接受的限制——侧边面板编辑器不适用于超大文件场景。
+- 成功时返回：`{ success: true }`
+- 不做备份/版本化——Git 是安全网
 
-### `src/types/index.ts` (modified)
+### `src/types/index.ts`（修改）
 
-Add:
+新增：
 
 ```ts
 export interface FileWriteRequest {
@@ -112,9 +112,9 @@ export interface FileWriteRequest {
 }
 ```
 
-## i18n Keys (new)
+## i18n 键（新增）
 
-Add to `src/i18n/en.ts` and `src/i18n/zh.ts`:
+在 `src/i18n/en.ts` 和 `src/i18n/zh.ts` 中添加：
 
 ```
 filePreview.edit            — "Edit" / "编辑"
@@ -126,7 +126,7 @@ filePreview.unsavedChanges  — "Unsaved changes" / "有未保存的更改"
 filePreview.saveError       — "Failed to save" / "保存失败"
 ```
 
-## Dependencies to Install
+## 需安装的依赖
 
 ```
 @uiw/react-codemirror
@@ -142,9 +142,9 @@ filePreview.saveError       — "Failed to save" / "保存失败"
 @codemirror/theme-one-dark
 ```
 
-## Out of Scope
+## 范围外（本次不做）
 
-- Multi-file simultaneous editing
-- Cross-session undo history
-- Diff view
-- File creation / deletion from the editor
+- 多文件同时编辑
+- 跨会话 undo 历史持久化
+- Diff 视图
+- 在编辑器内创建/删除文件
