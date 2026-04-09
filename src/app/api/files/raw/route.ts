@@ -3,14 +3,10 @@ import fs from 'fs/promises';
 import { createReadStream } from 'fs';
 import path from 'path';
 import os from 'os';
+import { isPathSafe, isRootPath } from '@/lib/files';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
-
-function isPathSafe(base: string, target: string): boolean {
-  const normalizedBase = base.endsWith(path.sep) ? base : base + path.sep;
-  return target === base || target.startsWith(normalizedBase);
-}
 
 const MIME_TYPES: Record<string, string> = {
   '.png': 'image/png',
@@ -102,12 +98,28 @@ export async function GET(request: NextRequest) {
   const resolved = path.resolve(filePath);
   const homeDir = os.homedir();
 
-  // Only allow reading files within the user's home directory
-  if (!isPathSafe(homeDir, resolved)) {
-    return new Response(JSON.stringify({ error: 'File is outside the allowed scope' }), {
-      status: 403,
-      headers: { 'Content-Type': 'application/json' },
-    });
+  const baseDir = request.nextUrl.searchParams.get('baseDir');
+  if (baseDir) {
+    const resolvedBase = path.resolve(baseDir);
+    if (isRootPath(resolvedBase)) {
+      return new Response(JSON.stringify({ error: 'Cannot use filesystem root as base directory' }), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+    if (!isPathSafe(resolvedBase, resolved)) {
+      return new Response(JSON.stringify({ error: 'File is outside the project scope' }), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+  } else {
+    if (!isPathSafe(homeDir, resolved)) {
+      return new Response(JSON.stringify({ error: 'File is outside the allowed scope' }), {
+        status: 403,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
   }
 
   try {
