@@ -342,7 +342,7 @@ export function UsageStatsSection() {
                 width={54}
               />
               <Tooltip
-                content={(props) => <ChartTooltip {...props} />}
+                content={<ChartTooltip />}
                 cursor={{ fill: "var(--color-accent)", opacity: 0.3 }}
               />
               <Legend

@@ -1218,7 +1218,7 @@ export function streamClaudeSdk(options: ClaudeStreamOptions): ReadableStream<st
                       : Array.isArray(block.content)
                         ? block.content
                             .filter((c: { type: string }) => c.type === 'text')
-                            .map((c: { text?: string }) => c.text)
+                            .map((c) => (c as { text?: string }).text)
                             .join('\n')
                         : String(block.content ?? '');
 
