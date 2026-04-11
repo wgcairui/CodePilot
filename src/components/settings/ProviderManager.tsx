@@ -150,7 +150,6 @@ export function ProviderManager() {
       setEnvOverrideSaving(false);
     }
   }, [envOverrideBaseUrl, envOverrideToken]);
-
   // Fetch OpenAI OAuth status
   useEffect(() => {
     fetch('/api/openai-oauth/status')
@@ -158,6 +157,7 @@ export function ProviderManager() {
       .then(data => { if (data) setOpenaiAuth(data); })
       .catch(() => {});
   }, []);
+
   // Fetch all provider models for the global default model selector
   const fetchModels = useCallback(() => {
     fetch('/api/providers/models')
