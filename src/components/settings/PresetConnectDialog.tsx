@@ -101,7 +101,6 @@ export function PresetConnectDialog({
   const { t } = useTranslation();
   const isZh = t('nav.chats') === '对话';
 
-<<<<<<< HEAD
   // Find existing MiniMax chat provider when minimax-media preset is opened
   const presetKey = preset?.key;
   useEffect(() => {
@@ -122,7 +121,7 @@ export function PresetConnectDialog({
       .catch(e => { if ((e as Error).name !== 'AbortError') { /* ignore */ } });
     return () => ctrl.abort();
   }, [open, presetKey]);
-=======
+
   // Unified auth-style transition. Both the dropdown selector and the
   // "smart recommend" helper link MUST go through this helper so edit-mode
   // stored-key state migrates consistently. Switching AWAY from the stored
@@ -155,7 +154,6 @@ export function PresetConnectDialog({
     if (isEdit && hasStoredKey && !clearStoredKey) return true;
     return false;
   })();
->>>>>>> upstream/main
 
   const handleTestConnection = async () => {
     // Belt-and-suspenders: the button disabled state already enforces
@@ -579,7 +577,6 @@ export function PresetConnectDialog({
                   Auth: <span className="font-mono">{authStyle === "auth_token" ? "Authorization: Bearer ..." : "X-Api-Key: ..."}</span>
                 </p>
               )}
-<<<<<<< HEAD
               {/* MiniMax Media: import key from existing MiniMax chat provider */}
               {preset.key.startsWith('minimax-media') && minimaxChatProviderId && !apiKey && (
                 <Button
@@ -596,7 +593,7 @@ export function PresetConnectDialog({
                 >
                   {isZh ? '从已有 MiniMax 账号导入 Key' : 'Import key from existing MiniMax provider'}
                 </Button>
-=======
+              )}
               {/* Explicit "clear stored key" action — only visible in edit
                   mode when a stored key exists and the user hasn't typed a
                   replacement. Without this, hasStoredKey + empty input was
@@ -629,7 +626,6 @@ export function PresetConnectDialog({
                     </Button>
                   )}
                 </p>
->>>>>>> upstream/main
               )}
               {/* Smart recommend for thirdparty based on URL */}
               {preset.key === "anthropic-thirdparty" && baseUrl && (() => {
@@ -642,13 +638,8 @@ export function PresetConnectDialog({
                     {' '}
                     <Button
                       variant="link"
-<<<<<<< HEAD
-                      className={"h-auto p-0 text-[11px] text-amber-500 underline hover:no-underline" /* lint-allow-raw-color */}
-                      onClick={() => setAuthStyle(inferred)}
-=======
                       className="h-auto p-0 text-[11px] text-amber-500 underline hover:no-underline"
                       onClick={() => applyAuthStyleChange(inferred)}
->>>>>>> upstream/main
                     >
                       {isZh ? '切换' : 'Switch'}
                     </Button>
