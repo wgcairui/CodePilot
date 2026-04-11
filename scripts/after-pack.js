@@ -29,44 +29,56 @@ module.exports = async function afterPack(context) {
 
   console.log(`[afterPack] Electron ${electronVersion}, arch=${archName}, platform=${platform}`);
 
-  // Step 1: Explicitly rebuild better-sqlite3 for the target Electron version
+  // Step 1: Rebuild better-sqlite3 for the target Electron version (with cache)
   const projectDir = process.cwd();
-  console.log('[afterPack] Rebuilding better-sqlite3 for Electron ABI...');
 
-  try {
-    // Use @electron/rebuild via npx (it's a dependency of electron-builder)
-    const rebuildCmd = `npx electron-rebuild -f -o better-sqlite3 -v ${electronVersion} -a ${archName}`;
-    console.log(`[afterPack] Running: ${rebuildCmd}`);
-    execSync(rebuildCmd, {
-      cwd: projectDir,
-      stdio: 'inherit',
-      timeout: 120000,
-    });
-    console.log('[afterPack] Rebuild completed successfully');
-  } catch (err) {
-    console.error('[afterPack] Failed to rebuild better-sqlite3:', err.message);
-    // Try alternative: use @electron/rebuild programmatically
-    try {
-      const { rebuild } = require('@electron/rebuild');
-      await rebuild({
-        buildPath: projectDir,
-        electronVersion: electronVersion,
-        arch: archName,
-        onlyModules: ['better-sqlite3'],
-        force: true,
-      });
-      console.log('[afterPack] Rebuild via @electron/rebuild API succeeded');
-    } catch (err2) {
-      console.error('[afterPack] @electron/rebuild API also failed:', err2.message);
-      throw new Error('Cannot rebuild better-sqlite3 for Electron ABI');
-    }
-  }
+  // Cache key: electronVersion + arch + better-sqlite3 package version
+  const bsqliteVersion = require(
+    path.join(projectDir, 'node_modules', 'better-sqlite3', 'package.json')
+  ).version;
+  const cacheKey = `${electronVersion}_${archName}_${bsqliteVersion}`;
+  const cacheDir = path.join(projectDir, '.node-rebuild-cache');
+  const cachedNode = path.join(cacheDir, `better_sqlite3-${cacheKey}.node`);
 
-  // Step 2: Verify the rebuilt .node file
   const rebuiltSource = path.join(
     projectDir, 'node_modules', 'better-sqlite3', 'build', 'Release', 'better_sqlite3.node'
   );
 
+  if (fs.existsSync(cachedNode)) {
+    console.log(`[afterPack] Cache hit — better-sqlite3@${bsqliteVersion} + Electron ${electronVersion} ${archName}, skipping rebuild`);
+    fs.copyFileSync(cachedNode, rebuiltSource);
+  } else {
+    console.log(`[afterPack] Cache miss — rebuilding better-sqlite3 for Electron ABI...`);
+    try {
+      // electronVersion and archName come from electron-builder context, not user input
+      const rebuildCmd = `npx electron-rebuild -f -o better-sqlite3 -v ${electronVersion} -a ${archName}`;
+      console.log(`[afterPack] Running: ${rebuildCmd}`);
+      execSync(rebuildCmd, { cwd: projectDir, stdio: 'inherit', timeout: 120000 });
+      console.log('[afterPack] Rebuild completed successfully');
+    } catch (err) {
+      console.error('[afterPack] Failed to rebuild better-sqlite3:', err.message);
+      try {
+        const { rebuild } = require('@electron/rebuild');
+        await rebuild({
+          buildPath: projectDir,
+          electronVersion: electronVersion,
+          arch: archName,
+          onlyModules: ['better-sqlite3'],
+          force: true,
+        });
+        console.log('[afterPack] Rebuild via @electron/rebuild API succeeded');
+      } catch (err2) {
+        console.error('[afterPack] @electron/rebuild API also failed:', err2.message);
+        throw new Error('Cannot rebuild better-sqlite3 for Electron ABI');
+      }
+    }
+    // Save to cache for next build
+    fs.mkdirSync(cacheDir, { recursive: true });
+    fs.copyFileSync(rebuiltSource, cachedNode);
+    console.log(`[afterPack] Cached rebuilt .node → ${cachedNode}`);
+  }
+
+  // Step 2: Verify the rebuilt .node file
   if (!fs.existsSync(rebuiltSource)) {
     throw new Error(`[afterPack] Rebuilt better_sqlite3.node not found at ${rebuiltSource}`);
   }

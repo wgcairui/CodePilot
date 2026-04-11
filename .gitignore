@@ -66,3 +66,4 @@ apps/site/node_modules/
 .claude/
 .claude.local.md
 .superpowers/
+.node-rebuild-cache/
