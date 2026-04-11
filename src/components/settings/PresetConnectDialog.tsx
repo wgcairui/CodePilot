@@ -587,7 +587,17 @@ export function PresetConnectDialog({
                   onClick={() => {
                     fetch(`/api/providers/${minimaxChatProviderId}/raw-key`)
                       .then(r => r.ok ? r.json() : null)
-                      .then(data => { if (data?.api_key) setApiKey(data.api_key); })
+                      .then(data => {
+                        if (data?.api_key) {
+                          setApiKey(data.api_key);
+                          // Reset stored-key flags so the imported key is
+                          // treated as a fresh user-provided value, not a DB-backed one.
+                          if (isEdit) {
+                            setHasStoredKey(false);
+                            setClearStoredKey(false);
+                          }
+                        }
+                      })
                       .catch(() => {});
                   }}
                 >
