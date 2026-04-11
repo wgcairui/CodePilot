@@ -214,15 +214,15 @@ export function RemoteHostList() {
       const files = await window.electronAPI.log.list();
       const remoteLog = files.find(f => f.startsWith('remote-'));
       if (!remoteLog) {
-        showToast({ type: "error", message: "No remote log file found" });
+        showToast({ type: "error", message: t("remoteHost.exportLog.noFile") });
         return;
       }
       const savedPath = await window.electronAPI.log.export(remoteLog);
       if (savedPath) {
-        showToast({ type: "success", message: `Log exported to ${savedPath}` });
+        showToast({ type: "success", message: t("remoteHost.exportLog.success") });
       }
     } catch (err) {
-      showToast({ type: "error", message: `Failed to export log: ${err}` });
+      showToast({ type: "error", message: t("remoteHost.exportLog.error") });
     }
   }, []);
 
@@ -265,10 +265,10 @@ export function RemoteHostList() {
             variant="ghost"
             className="gap-1.5"
             onClick={handleExportLog}
-            title="Export Log"
+            title={t("remoteHost.exportLog")}
           >
             <DownloadSimple size={14} />
-            Export Log
+            {t("remoteHost.exportLog")}
           </Button>
           <Button
             size="sm"

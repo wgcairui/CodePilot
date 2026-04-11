@@ -4,10 +4,11 @@ import os from 'node:os';
 
 const LOG_DIR = path.join(process.env.CLAUDE_GUI_DATA_DIR || path.join(os.homedir(), '.codepilot'), 'logs');
 
+let logDirEnsured = false;
 function ensureLogDir(): void {
-  if (!fs.existsSync(LOG_DIR)) {
-    fs.mkdirSync(LOG_DIR, { recursive: true });
-  }
+  if (logDirEnsured) return;
+  fs.mkdirSync(LOG_DIR, { recursive: true });
+  logDirEnsured = true;
 }
 
 function getLogFileName(prefix: string): string {
@@ -72,7 +73,6 @@ export function getLogDir(): string {
 
 export function listLogFiles(): string[] {
   try {
-    ensureLogDir();
     return fs.readdirSync(LOG_DIR)
       .filter(f => f.endsWith('.log'))
       .sort()
@@ -84,9 +84,7 @@ export function listLogFiles(): string[] {
 
 export function readLogFile(fileName: string): string | null {
   try {
-    const filePath = path.join(LOG_DIR, fileName);
-    if (!fs.existsSync(filePath)) return null;
-    return fs.readFileSync(filePath, 'utf-8');
+    return fs.readFileSync(path.join(LOG_DIR, fileName), 'utf-8');
   } catch {
     return null;
   }
@@ -94,9 +92,7 @@ export function readLogFile(fileName: string): string | null {
 
 export function exportLogFile(fileName: string, destPath: string): boolean {
   try {
-    const srcPath = path.join(LOG_DIR, fileName);
-    if (!fs.existsSync(srcPath)) return false;
-    fs.copyFileSync(srcPath, destPath);
+    fs.copyFileSync(path.join(LOG_DIR, fileName), destPath);
     return true;
   } catch {
     return false;

@@ -23,7 +23,7 @@ import {
   parseAllShowWidgets,
   parseShowWidget,
   computePartialWidgetKey,
-} from '../../components/chat/MessageItem';
+} from '../../components/chat/widget-parser';
 
 import { WIDGET_CSS_BRIDGE } from '../../lib/widget-css-bridge';
 import { WIDGET_SYSTEM_PROMPT, getGuidelines, createWidgetMcpServer } from '../../lib/widget-guidelines';

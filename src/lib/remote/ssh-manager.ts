@@ -1,7 +1,6 @@
 import { Client, type ConnectConfig } from 'ssh2';
 import net from 'node:net';
 import fs from 'node:fs';
-import { safeStorage } from 'electron';
 import type { RemoteHostConfig, ConnectionState, ConnectionStatus } from './types.js';
 import { createLogger } from '../logger.js';
 
@@ -30,6 +29,7 @@ interface ConnEntry {
   retryTimer: ReturnType<typeof setTimeout> | null;
   reconnectStart: number | null;
   server: net.Server | null; // local TCP server for port forwarding
+  decryptFn?: (encryptedBase64: string) => string;
 }
 
 export class SSHManager {
@@ -45,7 +45,7 @@ export class SSHManager {
     for (const l of this.statusListeners) l({ hostId, status, localPort, error });
   }
 
-  async connect(config: RemoteHostConfig): Promise<{ localPort: number }> {
+  async connect(config: RemoteHostConfig, decryptFn?: (encryptedBase64: string) => string): Promise<{ localPort: number }> {
     logger.info('SSH connect', { hostId: config.id, username: config.username, host: config.host, port: config.port });
     const existing = this.connections.get(config.id);
     if (existing?.status === 'connected') {
@@ -56,7 +56,7 @@ export class SSHManager {
     logger.info('SSH starting connection', { hostId: config.id, localPort });
     this.emit(config.id, 'connecting', null);
     try {
-      await this.doConnect(config, localPort);
+      await this.doConnect(config, localPort, decryptFn);
       logger.info('SSH connected', { hostId: config.id });
       return { localPort };
     } catch (err) {
@@ -65,7 +65,7 @@ export class SSHManager {
     }
   }
 
-  private async doConnect(config: RemoteHostConfig, localPort: number): Promise<void> {
+  private async doConnect(config: RemoteHostConfig, localPort: number, decryptFn?: (encryptedBase64: string) => string): Promise<void> {
     const client = new Client();
     const connectCfg: ConnectConfig = {
       host: config.host,
@@ -82,10 +82,8 @@ export class SSHManager {
         keyPath.startsWith('~') ? keyPath.replace('~', process.env.HOME ?? '') : keyPath
       );
     } else if (config.authType === 'password') {
-      if (config.encryptedPassword) {
-        connectCfg.password = safeStorage.decryptString(
-          Buffer.from(config.encryptedPassword, 'base64')
-        );
+      if (config.encryptedPassword && decryptFn) {
+        connectCfg.password = decryptFn(config.encryptedPassword);
       } else if (config.password) {
         connectCfg.password = config.password;
       }
@@ -106,7 +104,7 @@ export class SSHManager {
         server.listen(localPort, '127.0.0.1', () => {
           const entry: ConnEntry = {
             client, localPort, status: 'connected', server,
-            retryCount: 0, retryTimer: null, reconnectStart: null,
+            retryCount: 0, retryTimer: null, reconnectStart: null, decryptFn,
           };
           this.connections.set(config.id, entry);
           this.emit(config.id, 'connected', localPort);
@@ -154,7 +152,7 @@ export class SSHManager {
     entry.retryCount++;
     entry.retryTimer = setTimeout(async () => {
       try {
-        await this.doConnect(config, localPort);
+        await this.doConnect(config, localPort, entry.decryptFn);
         const e = this.connections.get(config.id);
         if (e) { e.retryCount = 0; e.reconnectStart = null; }
       } catch {

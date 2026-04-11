@@ -1441,6 +1441,9 @@ const en = {
   // ── Remote Hosts (SSH connection management) ────────────────
   'remoteHost.title': 'Remote Hosts',
   'remoteHost.exportLog': 'Export Log',
+  'remoteHost.exportLog.noFile': 'No remote log file found',
+  'remoteHost.exportLog.success': 'Log exported successfully',
+  'remoteHost.exportLog.error': 'Failed to export log',
   'remoteHost.addHost': 'Add Host',
   'remoteHost.connect': 'Connect',
   'remoteHost.disconnect': 'Disconnect',

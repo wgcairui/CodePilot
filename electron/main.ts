@@ -18,7 +18,7 @@ if (!sentryDisabled) {
   });
 }
 
-import { app, BrowserWindow, Notification, nativeImage, dialog, session, utilityProcess, ipcMain, shell, Tray, Menu, globalShortcut } from 'electron';
+import { app, BrowserWindow, Notification, nativeImage, dialog, session, utilityProcess, ipcMain, shell, Tray, Menu, globalShortcut, safeStorage } from 'electron';
 import path from 'path';
 import { execFileSync, spawn, ChildProcess } from 'child_process';
 import fs from 'fs';
@@ -28,7 +28,7 @@ import { TerminalManager } from './terminal-manager';
 import { sshManager } from '../src/lib/remote/ssh-manager';
 import { remoteAgentClient } from '../src/lib/remote/agent-client';
 import { checkRemoteEnv, buildInstallPlan, deployAgent, startRemoteAgent, isAgentRunning } from '../src/lib/remote/setup-checker';
-import { logger, getLogFilePath, listLogFiles, readLogFile, exportLogFile } from '../src/lib/logger';
+import { logger, listLogFiles, readLogFile, exportLogFile } from '../src/lib/logger';
 import type { RemoteHostConfig } from '../src/lib/remote/types';
 import type { ClientMessage } from '../remote-agent/src/types';
 
@@ -1402,7 +1402,7 @@ app.whenReady().then(async () => {
       password: data.password,
       agentPort: data.agentPort,
     };
-    return sshManager.connect(config);
+    return sshManager.connect(config, (enc) => safeStorage.decryptString(Buffer.from(enc, 'base64')));
   });
   ipcMain.handle('remote:disconnect', (_e, hostId: string) => sshManager.disconnect(hostId));
   ipcMain.handle('remote:get-status', (_e, hostId: string) => ({
@@ -1497,16 +1497,13 @@ app.whenReady().then(async () => {
     return readLogFile(fileName);
   });
   ipcMain.handle('log:export', async (_event, fileName: string) => {
-    const logPath = getLogFilePath(fileName.replace('.log', ''));
-    if (!fs.existsSync(logPath)) {
-      throw new Error('Log file not found');
-    }
     const { filePath } = await dialog.showSaveDialog(mainWindow!, {
       defaultPath: fileName,
       filters: [{ name: 'Log Files', extensions: ['log'] }],
     });
     if (!filePath) return null;
-    fs.copyFileSync(logPath, filePath);
+    const ok = exportLogFile(fileName, filePath);
+    if (!ok) throw new Error('Log file not found');
     logger.info('log:export done', { fileName, destPath: filePath });
     return filePath;
   });

@@ -58,15 +58,17 @@ export function buildInstallPlan(result: CheckResult, localAgentVersion: string)
 export async function deployAgent(client: Client, localAgentPath: string): Promise<void> {
   logger.info('Deploying agent', { localAgentPath });
   let content: Buffer;
+  let remoteHome: string;
   try {
-    content = await fs.promises.readFile(localAgentPath);
-    logger.info('Read local agent file', { size: content.length });
+    [content, remoteHome] = await Promise.all([
+      fs.promises.readFile(localAgentPath),
+      sshExec(client, 'echo $HOME').then(h => h ?? '/root'),
+    ]);
+    logger.info('Agent file and remote home resolved', { size: content.length, remoteHome });
   } catch (err) {
-    logger.error('Failed to read local agent file', { error: String(err) });
+    logger.error('Failed to prepare deployment', { error: String(err) });
     throw err;
   }
-  const remoteHome = (await sshExec(client, 'echo $HOME')) ?? '/root';
-  logger.info('Remote home resolved', { remoteHome });
   return new Promise((resolve, reject) => {
     client.sftp((err, sftp) => {
       if (err) {

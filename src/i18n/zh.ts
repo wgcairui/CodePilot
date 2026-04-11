@@ -1438,6 +1438,9 @@ const zh: Record<TranslationKey, string> = {
   // ── Remote Hosts (SSH 连接管理) ──────────────────────────────
   'remoteHost.title': '远程主机',
   'remoteHost.exportLog': '导出日志',
+  'remoteHost.exportLog.noFile': '未找到远程日志文件',
+  'remoteHost.exportLog.success': '日志导出成功',
+  'remoteHost.exportLog.error': '导出日志失败',
   'remoteHost.addHost': '添加主机',
   'remoteHost.connect': '连接',
   'remoteHost.disconnect': '断开',
