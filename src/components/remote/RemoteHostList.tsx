@@ -2,11 +2,12 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { SpinnerGap, Plus, Trash, PencilSimple, DownloadSimple } from "@/components/ui/icon";
+import { SpinnerGap, Plus, Trash, PencilSimple, DownloadSimple, Brain } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/hooks/useTranslation";
 import { showToast } from "@/hooks/useToast";
 import { AddHostDialog } from "./AddHostDialog";
+import { LogAnalysisDialog } from "./LogAnalysisDialog";
 import { SetupGuide, type CheckResult, type InstallPlan } from "./SetupGuide";
 import type { RemoteHost, RemoteConnectionStatus } from "@/types";
 
@@ -49,6 +50,7 @@ export function RemoteHostList() {
   const [setupState, setSetupState] = useState<SetupState | null>(null);
   const [addDialogOpen, setAddDialogOpen] = useState(false);
   const [editHost, setEditHost] = useState<RemoteHost | null>(null);
+  const [logAnalysisOpen, setLogAnalysisOpen] = useState(false);
 
   const fetchHosts = useCallback(async () => {
     try {
@@ -272,6 +274,16 @@ export function RemoteHostList() {
           </Button>
           <Button
             size="sm"
+            variant="ghost"
+            className="gap-1.5"
+            onClick={() => setLogAnalysisOpen(true)}
+            title={t("remoteHost.analyzeLog")}
+          >
+            <Brain size={14} />
+            {t("remoteHost.analyzeLog")}
+          </Button>
+          <Button
+            size="sm"
             variant="outline"
             className="gap-1.5"
             onClick={() => {
@@ -424,6 +436,12 @@ export function RemoteHostList() {
         onOpenChange={setAddDialogOpen}
         onComplete={fetchHosts}
         editHost={editHost}
+      />
+
+      {/* Log Analysis dialog */}
+      <LogAnalysisDialog
+        open={logAnalysisOpen}
+        onOpenChange={setLogAnalysisOpen}
       />
     </div>
   );

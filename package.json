@@ -31,6 +31,7 @@
     "electron:build": "rm -rf release/ && next build && node scripts/build-electron.mjs",
     "electron:pack": "rm -rf release/ && npm run electron:build && electron-builder --config electron-builder.yml",
     "electron:pack:mac": "rm -rf release/ && next build && node scripts/build-electron.mjs && electron-builder --mac --arm64 --config electron-builder.yml",
+    "electron:pack:mac:nosign": "CSC_IDENTITY_AUTO_DISCOVERY=false rm -rf release/ && next build && node scripts/build-electron.mjs && electron-builder --mac --arm64 --config electron-builder.yml",
     "electron:pack:win": "rm -rf release/ && npm run electron:build && electron-builder --win --config electron-builder.yml",
     "electron:pack:linux": "rm -rf release/ && npm run electron:build && electron-builder --linux --config electron-builder.yml"
   },
