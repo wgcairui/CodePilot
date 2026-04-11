@@ -28,6 +28,7 @@ import { TerminalManager } from './terminal-manager';
 import { sshManager } from '../src/lib/remote/ssh-manager';
 import { remoteAgentClient } from '../src/lib/remote/agent-client';
 import { checkRemoteEnv, buildInstallPlan, deployAgent, startRemoteAgent, isAgentRunning } from '../src/lib/remote/setup-checker';
+import { logger, getLogFilePath, listLogFiles, readLogFile, exportLogFile } from '../src/lib/logger';
 import type { RemoteHostConfig } from '../src/lib/remote/types';
 import type { ClientMessage } from '../remote-agent/src/types';
 
@@ -1427,26 +1428,87 @@ app.whenReady().then(async () => {
   const localAgentVersion = getLocalAgentVersion();
 
   ipcMain.handle('remote:check-env', async (_e, hostId: string) => {
+    logger.info('remote:check-env', { hostId });
     const client = sshManager.getRawClient(hostId);
-    if (!client) throw new Error('Not connected');
-    const checkResult = await checkRemoteEnv(client);
-    const installPlan = buildInstallPlan(checkResult, localAgentVersion);
-    return { checkResult, installPlan };
+    if (!client) {
+      logger.error('remote:check-env - not connected', { hostId });
+      throw new Error('Not connected');
+    }
+    try {
+      const checkResult = await checkRemoteEnv(client);
+      const installPlan = buildInstallPlan(checkResult, localAgentVersion);
+      logger.info('remote:check-env done', { hostId, needsSetup: installPlan.needsNode || installPlan.needsClaude || installPlan.needsAgentDeploy });
+      return { checkResult, installPlan };
+    } catch (err) {
+      logger.error('remote:check-env failed', { hostId, error: String(err) });
+      throw err;
+    }
   });
   ipcMain.handle('remote:deploy-agent', async (_e, hostId: string) => {
+    logger.info('remote:deploy-agent', { hostId });
     const client = sshManager.getRawClient(hostId);
-    if (!client) throw new Error('Not connected');
-    await deployAgent(client, getLocalAgentPath());
+    if (!client) {
+      logger.error('remote:deploy-agent - not connected', { hostId });
+      throw new Error('Not connected');
+    }
+    try {
+      await deployAgent(client, getLocalAgentPath());
+      logger.info('remote:deploy-agent done', { hostId });
+    } catch (err) {
+      logger.error('remote:deploy-agent failed', { hostId, error: String(err) });
+      throw err;
+    }
   });
   ipcMain.handle('remote:start-agent', async (_e, hostId: string, port: number) => {
+    logger.info('remote:start-agent', { hostId, port });
     const client = sshManager.getRawClient(hostId);
-    if (!client) throw new Error('Not connected');
-    await startRemoteAgent(client, port);
+    if (!client) {
+      logger.error('remote:start-agent - not connected', { hostId });
+      throw new Error('Not connected');
+    }
+    try {
+      await startRemoteAgent(client, port);
+      logger.info('remote:start-agent done', { hostId, port });
+    } catch (err) {
+      logger.error('remote:start-agent failed', { hostId, port, error: String(err) });
+      throw err;
+    }
   });
   ipcMain.handle('remote:is-agent-running', async (_e, hostId: string, port: number) => {
+    logger.info('remote:is-agent-running', { hostId, port });
     const client = sshManager.getRawClient(hostId);
-    if (!client) throw new Error('Not connected');
-    return isAgentRunning(client, port);
+    if (!client) {
+      logger.error('remote:is-agent-running - not connected', { hostId });
+      throw new Error('Not connected');
+    }
+    try {
+      const result = await isAgentRunning(client, port);
+      logger.info('remote:is-agent-running done', { hostId, port, running: result });
+      return result;
+    } catch (err) {
+      logger.error('remote:is-agent-running failed', { hostId, port, error: String(err) });
+      throw err;
+    }
+  });
+  ipcMain.handle('log:list', async () => {
+    return listLogFiles();
+  });
+  ipcMain.handle('log:read', async (_event, fileName: string) => {
+    return readLogFile(fileName);
+  });
+  ipcMain.handle('log:export', async (_event, fileName: string) => {
+    const logPath = getLogFilePath(fileName.replace('.log', ''));
+    if (!fs.existsSync(logPath)) {
+      throw new Error('Log file not found');
+    }
+    const { filePath } = await dialog.showSaveDialog(mainWindow!, {
+      defaultPath: fileName,
+      filters: [{ name: 'Log Files', extensions: ['log'] }],
+    });
+    if (!filePath) return null;
+    fs.copyFileSync(logPath, filePath);
+    logger.info('log:export done', { fileName, destPath: filePath });
+    return filePath;
   });
 
   // --- End terminal IPC handlers ---

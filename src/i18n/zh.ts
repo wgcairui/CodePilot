@@ -15,6 +15,7 @@ const zh: Record<TranslationKey, string> = {
   'nav.mcp': 'MCP',
   'nav.gallery': '素材库',
   'nav.scheduledTasks': '定时任务',
+  'nav.remoteHosts': '远程主机',
 
   // ── Chat list panel ─────────────────────────────────────────
   'chatList.justNow': '刚刚',
@@ -1436,6 +1437,7 @@ const zh: Record<TranslationKey, string> = {
 
   // ── Remote Hosts (SSH 连接管理) ──────────────────────────────
   'remoteHost.title': '远程主机',
+  'remoteHost.exportLog': '导出日志',
   'remoteHost.addHost': '添加主机',
   'remoteHost.connect': '连接',
   'remoteHost.disconnect': '断开',

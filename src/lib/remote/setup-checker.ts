@@ -2,6 +2,9 @@ import type { Client } from 'ssh2';
 import fs from 'node:fs';
 import type { CheckResult, InstallPlan } from './types';
 export type { CheckResult, InstallPlan } from './types';
+import { createLogger } from '../logger.js';
+
+const logger = createLogger('setup');
 
 async function sshExec(client: Client, cmd: string): Promise<string | null> {
   return new Promise(resolve => {
@@ -17,18 +20,21 @@ async function sshExec(client: Client, cmd: string): Promise<string | null> {
 }
 
 export async function checkRemoteEnv(client: Client): Promise<CheckResult> {
+  logger.info('Checking remote environment');
   const [osRaw, nodeRaw, claudeRaw, agentHead] = await Promise.all([
     sshExec(client, 'uname -s'),
     sshExec(client, 'node --version 2>/dev/null'),
     sshExec(client, 'claude --version 2>/dev/null'),
     sshExec(client, 'head -1 ~/.codepilot/agent.js 2>/dev/null || echo ""'),
   ]);
-  return {
+  const result: CheckResult = {
     os: osRaw === 'Darwin' ? 'Darwin' : osRaw === 'Linux' ? 'Linux' : 'unknown',
     nodeVersion: nodeRaw?.startsWith('v') ? nodeRaw : null,
     claudeVersion: claudeRaw?.includes('claude') ? claudeRaw : null,
     agentVersion: agentHead?.match(/CODEPILOT_AGENT_VERSION=(\S+)/)?.[1] ?? null,
   };
+  logger.info('Environment check result', { result });
+  return result;
 }
 
 export function buildInstallPlan(result: CheckResult, localAgentVersion: string): InstallPlan {
@@ -50,18 +56,41 @@ export function buildInstallPlan(result: CheckResult, localAgentVersion: string)
 }
 
 export async function deployAgent(client: Client, localAgentPath: string): Promise<void> {
-  const content = await fs.promises.readFile(localAgentPath);
-  // 先获取远端 $HOME，避免用本地 process.env.HOME
+  logger.info('Deploying agent', { localAgentPath });
+  let content: Buffer;
+  try {
+    content = await fs.promises.readFile(localAgentPath);
+    logger.info('Read local agent file', { size: content.length });
+  } catch (err) {
+    logger.error('Failed to read local agent file', { error: String(err) });
+    throw err;
+  }
   const remoteHome = (await sshExec(client, 'echo $HOME')) ?? '/root';
+  logger.info('Remote home resolved', { remoteHome });
   return new Promise((resolve, reject) => {
     client.sftp((err, sftp) => {
-      if (err) { reject(err); return; }
+      if (err) {
+        logger.error('SFTP open failed', { error: String(err) });
+        reject(err);
+        return;
+      }
       client.exec('mkdir -p ~/.codepilot', (e2) => {
-        if (e2) { reject(e2); return; }
+        if (e2) {
+          logger.error('mkdir failed', { error: String(e2) });
+          reject(e2);
+          return;
+        }
         const remote = `${remoteHome}/.codepilot/agent.js`;
+        logger.info('Deploying to remote', { remote });
         const ws = sftp.createWriteStream(remote);
-        ws.on('close', resolve);
-        ws.on('error', reject);
+        ws.on('close', () => {
+          logger.info('Agent deployed successfully');
+          resolve();
+        });
+        ws.on('error', (e) => {
+          logger.error('SFTP write error', { error: String(e) });
+          reject(e);
+        });
         ws.end(content);
       });
     });
@@ -69,12 +98,21 @@ export async function deployAgent(client: Client, localAgentPath: string): Promi
 }
 
 export async function startRemoteAgent(client: Client, port: number): Promise<void> {
+  logger.info('Starting remote agent', { port });
   return new Promise((resolve, reject) => {
     client.exec(
       `nohup node ~/.codepilot/agent.js --port=${port} >> ~/.codepilot/agent.log 2>&1 &`,
       (err, stream) => {
-        if (err) { reject(err); return; }
-        stream.on('close', resolve);
+        if (err) {
+          logger.error('Start agent exec failed', { error: String(err) });
+          reject(err);
+          return;
+        }
+        logger.info('Start agent command executed');
+        stream.on('close', () => {
+          logger.info('Remote agent started', { port });
+          resolve();
+        });
       }
     );
   });

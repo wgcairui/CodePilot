@@ -3,6 +3,9 @@ import net from 'node:net';
 import fs from 'node:fs';
 import { safeStorage } from 'electron';
 import type { RemoteHostConfig, ConnectionState, ConnectionStatus } from './types.js';
+import { createLogger } from '../logger.js';
+
+const logger = createLogger('remote');
 
 const MAX_RETRY_DELAY_MS = 30_000;
 const RECONNECT_TIMEOUT_MS = 5 * 60 * 1000;
@@ -43,12 +46,23 @@ export class SSHManager {
   }
 
   async connect(config: RemoteHostConfig): Promise<{ localPort: number }> {
+    logger.info('SSH connect', { hostId: config.id, username: config.username, host: config.host, port: config.port });
     const existing = this.connections.get(config.id);
-    if (existing?.status === 'connected') return { localPort: existing.localPort };
+    if (existing?.status === 'connected') {
+      logger.info('SSH already connected', { hostId: config.id, localPort: existing.localPort });
+      return { localPort: existing.localPort };
+    }
     const localPort = await findFreePort();
+    logger.info('SSH starting connection', { hostId: config.id, localPort });
     this.emit(config.id, 'connecting', null);
-    await this.doConnect(config, localPort);
-    return { localPort };
+    try {
+      await this.doConnect(config, localPort);
+      logger.info('SSH connected', { hostId: config.id });
+      return { localPort };
+    } catch (err) {
+      logger.error('SSH connect failed', { hostId: config.id, error: String(err) });
+      throw err;
+    }
   }
 
   private async doConnect(config: RemoteHostConfig, localPort: number): Promise<void> {
@@ -125,11 +139,14 @@ export class SSHManager {
     const entry = this.connections.get(config.id);
     if (!entry) return;
     if (!entry.reconnectStart) entry.reconnectStart = Date.now();
-    if (Date.now() - entry.reconnectStart > RECONNECT_TIMEOUT_MS) {
+    const elapsed = Date.now() - entry.reconnectStart;
+    if (elapsed > RECONNECT_TIMEOUT_MS) {
+      logger.error('SSH reconnect timeout', { hostId: config.id, elapsed });
       entry.status = 'failed';
       this.emit(config.id, 'failed', null, 'Reconnect timeout (5min)');
       return;
     }
+    logger.info('SSH scheduling reconnect', { hostId: config.id, attempt: entry.retryCount + 1, elapsed });
     entry.status = 'reconnecting';
     this.emit(config.id, 'reconnecting', localPort);
     // 退避序列：1→2→4→8→30s（第 4 次起固定 30s）
@@ -148,12 +165,17 @@ export class SSHManager {
 
   disconnect(hostId: string): void {
     const entry = this.connections.get(hostId);
-    if (!entry) return;
+    if (!entry) {
+      logger.warn('SSH disconnect - no connection found', { hostId });
+      return;
+    }
+    logger.info('SSH disconnecting', { hostId });
     if (entry.retryTimer) clearTimeout(entry.retryTimer);
     entry.server?.close();
     entry.client.end();
     this.connections.delete(hostId);
     this.emit(hostId, 'disconnected', null);
+    logger.info('SSH disconnected', { hostId });
   }
 
   getRawClient(hostId: string): Client | null {

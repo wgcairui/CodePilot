@@ -2,9 +2,10 @@
 
 import { useState, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
-import { SpinnerGap, Plus, Trash, PencilSimple } from "@/components/ui/icon";
+import { SpinnerGap, Plus, Trash, PencilSimple, DownloadSimple } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/hooks/useTranslation";
+import { showToast } from "@/hooks/useToast";
 import { AddHostDialog } from "./AddHostDialog";
 import { SetupGuide, type CheckResult, type InstallPlan } from "./SetupGuide";
 import type { RemoteHost, RemoteConnectionStatus } from "@/types";
@@ -171,7 +172,8 @@ export function RemoteHostList() {
         ...prev,
         [host.id]: running ? "connected" : "failed",
       }));
-    } catch {
+    } catch (err) {
+      console.error('[remote] auto install failed:', err);
       setStatusMap((prev) => ({ ...prev, [host.id]: "failed" }));
     } finally {
       setConnectingId(null);
@@ -206,6 +208,24 @@ export function RemoteHostList() {
     []
   );
 
+  const handleExportLog = useCallback(async () => {
+    if (typeof window === 'undefined' || !window.electronAPI?.log) return;
+    try {
+      const files = await window.electronAPI.log.list();
+      const remoteLog = files.find(f => f.startsWith('remote-'));
+      if (!remoteLog) {
+        showToast({ type: "error", message: "No remote log file found" });
+        return;
+      }
+      const savedPath = await window.electronAPI.log.export(remoteLog);
+      if (savedPath) {
+        showToast({ type: "success", message: `Log exported to ${savedPath}` });
+      }
+    } catch (err) {
+      showToast({ type: "error", message: `Failed to export log: ${err}` });
+    }
+  }, []);
+
   const statusLabel = useCallback(
     (status: RemoteConnectionStatus): string => {
       const map: Record<RemoteConnectionStatus, string> = {
@@ -239,18 +259,30 @@ export function RemoteHostList() {
             Manage SSH connections to remote development hosts
           </p>
         </div>
-        <Button
-          size="sm"
-          variant="outline"
-          className="gap-1.5"
-          onClick={() => {
-            setEditHost(null);
-            setAddDialogOpen(true);
-          }}
-        >
-          <Plus size={14} />
-          {t("remoteHost.addHost")}
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant="ghost"
+            className="gap-1.5"
+            onClick={handleExportLog}
+            title="Export Log"
+          >
+            <DownloadSimple size={14} />
+            Export Log
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            className="gap-1.5"
+            onClick={() => {
+              setEditHost(null);
+              setAddDialogOpen(true);
+            }}
+          >
+            <Plus size={14} />
+            {t("remoteHost.addHost")}
+          </Button>
+        </div>
       </div>
 
       {/* Host list */}

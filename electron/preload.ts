@@ -82,6 +82,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return () => ipcRenderer.removeListener('remote:agent-message', l);
     },
   },
+  log: {
+    list: () => ipcRenderer.invoke('log:list'),
+    read: (fileName: string) => ipcRenderer.invoke('log:read', fileName),
+    export: (fileName: string) => ipcRenderer.invoke('log:export', fileName),
+  },
   notification: {
     show: (options: { title: string; body: string; onClick?: unknown }) =>
       ipcRenderer.invoke('notification:show', options),

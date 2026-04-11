@@ -18,6 +18,7 @@ const en = {
   'nav.mcp': 'MCP',
   'nav.gallery': 'Gallery',
   'nav.scheduledTasks': 'Scheduled Tasks',
+  'nav.remoteHosts': 'Remote Hosts',
 
   // ── Chat list panel ─────────────────────────────────────────
   'chatList.justNow': 'just now',
@@ -1439,6 +1440,7 @@ const en = {
 
   // ── Remote Hosts (SSH connection management) ────────────────
   'remoteHost.title': 'Remote Hosts',
+  'remoteHost.exportLog': 'Export Log',
   'remoteHost.addHost': 'Add Host',
   'remoteHost.connect': 'Connect',
   'remoteHost.disconnect': 'Disconnect',

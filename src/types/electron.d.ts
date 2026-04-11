@@ -81,6 +81,12 @@ interface ElectronRemoteAPI {
   ) => () => void;
 }
 
+interface ElectronLogAPI {
+  list: () => Promise<string[]>;
+  read: (fileName: string) => Promise<string | null>;
+  export: (fileName: string) => Promise<string | null>;
+}
+
 interface ElectronAPI {
   versions: {
     electron: string;
@@ -110,6 +116,7 @@ interface ElectronAPI {
     exportPng: (html: string, width: number, isDark: boolean) => Promise<string>;
   };
   remote?: ElectronRemoteAPI;
+  log?: ElectronLogAPI;
   notification?: {
     show: (options: { title: string; body?: string; onClick?: { type: string; payload: string } }) => Promise<void>;
     onClick: (listener: (action: { type: string; payload: string }) => void) => () => void;
