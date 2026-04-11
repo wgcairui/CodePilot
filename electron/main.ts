@@ -513,12 +513,40 @@ function getExpandedShellPath(): string {
   }
 }
 
-function getPort(): Promise<number> {
+/** Try to bind a specific port; resolves true if free, false if in use. */
+function isPortFree(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.unref();
+    server.once('error', () => resolve(false));
+    server.listen(port, '0.0.0.0', () => {
+      server.close(() => resolve(true));
+    });
+  });
+}
+
+/**
+ * Resolve the port to use for the embedded Next.js server.
+ *  1. Honour CODEPILOT_PORT env var if set.
+ *  2. Otherwise try the default fixed port (3456).
+ *  3. Fall back to a random free port if the preferred port is taken.
+ */
+async function getPort(): Promise<number> {
+  const DEFAULT_PORT = 3456;
+  const preferred = process.env.CODEPILOT_PORT
+    ? parseInt(process.env.CODEPILOT_PORT, 10)
+    : DEFAULT_PORT;
+
+  if (await isPortFree(preferred)) {
+    return preferred;
+  }
+
+  console.warn(`Port ${preferred} is in use, falling back to a random port`);
   return new Promise((resolve, reject) => {
     const server = net.createServer();
     server.unref();
     server.on('error', reject);
-    server.listen(0, '127.0.0.1', () => {
+    server.listen(0, '0.0.0.0', () => {
       const addr = server.address();
       if (addr && typeof addr === 'object') {
         const port = addr.port;
@@ -595,7 +623,7 @@ function startServer(port: number): Electron.UtilityProcess {
     // Inject system proxy (only if not already set in shell env)
     ...(!userShellEnv.HTTP_PROXY && !userShellEnv.HTTPS_PROXY ? resolvedProxyEnv : {}),
     PORT: String(port),
-    HOSTNAME: '127.0.0.1',
+    HOSTNAME: '0.0.0.0',
     CLAUDE_GUI_DATA_DIR: path.join(home, '.codepilot'),
     HOME: home,
     USERPROFILE: home,
