@@ -75,16 +75,19 @@ for (const [, adapter] of state.adapters) {
 
 **改动 C**：`runAdapterLoop` 退避等待前/后维护 `reconnectingAt`：
 ```typescript
-// 退避等待前（已有的退避计算逻辑之后）
+// ① 每次退避等待前（含递归调用路径），无条件设置 reconnectingAt
 meta.reconnectingAt = new Date(Date.now() + delayMs).toISOString();
 state.adapterMeta.set(adapter.channelType, meta);
 
 await new Promise(r => setTimeout(r, delayMs));
 
-// 成功重启后清空
+// ② 成功重启后清空（restartAttempts 归零也只在成功分支）
 meta.reconnectingAt = null;
 meta.restartAttempts = 0;
 meta.lastError = null;
+
+// ③ 失败分支（catch restartErr）：不重置 restartAttempts，不清 reconnectingAt
+//    （递归调用 runAdapterLoop 时会在下一次退避等待前重新写入 reconnectingAt）
 ```
 
 **改动 D**：`getStatus()` 透传 `reconnectingAt`：
@@ -109,15 +112,44 @@ return {
 | `running=false && reconnectingAt` | 黄色 | "X秒后重连" |
 | `running=false && !reconnectingAt` | 灰色 | "已停止"（不变） |
 
-倒计时计算：
+由于 `useBridgeStatus` 每 5s 才轮询一次，倒计时若只依赖 poll 刷新会有明显跳变。  
+解决方案：在 `BridgeSection` 中使用一个 1s 的 `setInterval` 驱动本地 `tick` 状态，专门用于倒计时刷新（不重新 fetch）。
+
 ```typescript
+// BridgeSection.tsx 组件内
+const [, setTick] = useState(0);
+useEffect(() => {
+  const hasReconnecting = bridgeStatus?.adapters.some(a => a.reconnectingAt);
+  if (!hasReconnecting) return;
+  const id = setInterval(() => setTick(t => t + 1), 1000);
+  return () => clearInterval(id);
+}, [bridgeStatus]);
+
+// 使用时
 const secondsUntilRetry = Math.max(
   0,
   Math.round((new Date(adapter.reconnectingAt!).getTime() - Date.now()) / 1000)
 );
 ```
 
-### 4. `src/i18n/en.ts` + `src/i18n/zh.ts`
+仅当存在处于重连状态的 adapter 时才启动 timer，其他情况不消耗资源。
+
+### 4. `src/hooks/useBridgeStatus.ts`
+
+本文件内联了自己的 `AdapterStatus` 接口（未从 `types.ts` 导入），需同步添加字段：
+
+```typescript
+interface AdapterStatus {
+  channelType: string;
+  running: boolean;
+  connectedAt: string | null;
+  lastMessageAt: string | null;
+  error: string | null;
+  reconnectingAt: string | null;  // 新增
+}
+```
+
+### 5. `src/i18n/en.ts` + `src/i18n/zh.ts`
 
 新增 i18n key：
 ```typescript
