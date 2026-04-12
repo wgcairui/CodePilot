@@ -26,6 +26,20 @@ const recentPermissionForwards = new Map<string, number>();
 /**
  * Forward a permission request to an IM channel as an interactive message.
  */
+/**
+ * Interactive tools that require structured user input (option picking,
+ * form filling, etc.) cannot be handled by the bridge's Allow/Deny card
+ * flow. These tools are explicitly denied at the broker level so the
+ * model gets a clear reason and can fall back to plain text.
+ *
+ * Exported for unit testing — the check itself is pure (no IO).
+ */
+const BRIDGE_UNSUPPORTED_INTERACTIVE_TOOLS = new Set(['AskUserQuestion']);
+
+export function isBridgeUnsupportedInteractiveTool(toolName: string): boolean {
+  return BRIDGE_UNSUPPORTED_INTERACTIVE_TOOLS.has(toolName);
+}
+
 export async function forwardPermissionRequest(
   adapter: BaseChannelAdapter,
   address: ChannelAddress,
@@ -36,13 +50,7 @@ export async function forwardPermissionRequest(
   suggestions?: unknown[],
   replyToMessageId?: string,
 ): Promise<void> {
-  // Interactive tools that require structured user input (option picking,
-  // form filling) cannot be handled by the bridge's Allow/Deny card flow.
-  // Instead of silently executing with empty answers (which gives the model
-  // garbage data), deny with a clear reason so the model can fall back to
-  // asking via plain text.
-  const BRIDGE_UNSUPPORTED_INTERACTIVE_TOOLS = new Set(['AskUserQuestion']);
-  if (BRIDGE_UNSUPPORTED_INTERACTIVE_TOOLS.has(toolName)) {
+  if (isBridgeUnsupportedInteractiveTool(toolName)) {
     console.log(`[bridge] Denied ${toolName} (${permissionRequestId}) — interactive tools not supported in bridge sessions`);
     resolvePendingPermission(permissionRequestId, {
       behavior: 'deny',
