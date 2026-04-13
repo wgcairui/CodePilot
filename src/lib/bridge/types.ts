@@ -122,6 +122,7 @@ export interface AdapterStatus {
   connectedAt: string | null;
   lastMessageAt: string | null;
   error: string | null;
+  reconnectingAt: string | null;
 }
 
 // ── Audit & Dedup ──────────────────────────────────────────────
