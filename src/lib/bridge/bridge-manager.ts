@@ -199,6 +199,8 @@ interface AdapterMeta {
   lastError: string | null;
   /** Tracks consecutive restart attempts for exponential backoff. Reset to 0 on success. */
   restartAttempts?: number;
+  /** ISO timestamp of next reconnect attempt. null = not currently reconnecting. */
+  reconnectingAt?: string | null;
 }
 
 interface BridgeManagerState {
@@ -329,11 +331,11 @@ export async function start(): Promise<StartResult> {
   // Suppress notification bot polling to avoid conflicts
   setBridgeModeActive(true);
 
-  // Now start the consumer loops (state.running is already true)
+  // Start consumer loops for all registered adapters.
+  // Adapters that failed initial start have isRunning()=false; their while-loop
+  // exits immediately and the backoff-restart logic at the bottom kicks in.
   for (const [, adapter] of state.adapters) {
-    if (adapter.isRunning()) {
-      runAdapterLoop(adapter);
-    }
+    runAdapterLoop(adapter);
   }
 
   console.log(`[bridge-manager] Bridge started with ${startedCount} adapter(s)`);
@@ -424,6 +426,7 @@ export function getStatus(): BridgeStatus {
         connectedAt: state.startedAt,
         lastMessageAt: meta?.lastMessageAt ?? null,
         error: meta?.lastError ?? null,
+        reconnectingAt: meta?.reconnectingAt ?? null,
       };
     }),
   };
@@ -496,12 +499,16 @@ function runAdapterLoop(adapter: BaseChannelAdapter): void {
       const attempt = meta.restartAttempts ?? 0;
       const delayMs = Math.min(30_000 * Math.pow(2, attempt), 120_000);
       meta.restartAttempts = attempt + 1;
+      // ① Set reconnectingAt before every backoff wait (including recursive retry paths)
+      meta.reconnectingAt = new Date(Date.now() + delayMs).toISOString();
       state.adapterMeta.set(adapter.channelType, meta);
       console.warn(`[bridge-manager] ${adapter.channelType} adapter stopped unexpectedly — restarting in ${delayMs / 1000}s (attempt ${attempt + 1})`);
       await new Promise(r => setTimeout(r, delayMs));
       if (state.running && !abort.signal.aborted) {
         try {
           await adapter.start();
+          // ② Success branch: clear reconnectingAt, reset restartAttempts
+          meta.reconnectingAt = null;
           meta.restartAttempts = 0;
           meta.lastError = null;
           state.adapterMeta.set(adapter.channelType, meta);
@@ -510,9 +517,10 @@ function runAdapterLoop(adapter: BaseChannelAdapter): void {
         } catch (restartErr) {
           const errMsg = restartErr instanceof Error ? restartErr.message : String(restartErr);
           console.error(`[bridge-manager] ${adapter.channelType} adapter restart failed:`, errMsg);
+          // ③ Failure branch: do NOT reset restartAttempts, do NOT clear reconnectingAt
+          //    The recursive runAdapterLoop call will overwrite reconnectingAt at the next backoff wait
           meta.lastError = errMsg;
           state.adapterMeta.set(adapter.channelType, meta);
-          // Schedule another attempt by re-running the loop (isRunning() still false)
           runAdapterLoop(adapter);
         }
       }
