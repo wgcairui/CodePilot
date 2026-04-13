@@ -68,6 +68,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     getStatus: (hostId: string) => ipcRenderer.invoke('remote:get-status', hostId),
     checkEnv: (hostId: string) => ipcRenderer.invoke('remote:check-env', hostId),
     deployAgent: (hostId: string) => ipcRenderer.invoke('remote:deploy-agent', hostId),
+    autoInstallDeps: (hostId: string) => ipcRenderer.invoke('remote:auto-install-deps', hostId),
     startAgent: (hostId: string, port: number) => ipcRenderer.invoke('remote:start-agent', hostId, port),
     isAgentRunning: (hostId: string, port: number) => ipcRenderer.invoke('remote:is-agent-running', hostId, port),
     agentSend: (hostId: string, msg: unknown) => ipcRenderer.invoke('remote:agent-send', hostId, msg),

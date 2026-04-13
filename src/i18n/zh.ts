@@ -1484,6 +1484,8 @@ const zh: Record<TranslationKey, string> = {
   'remoteHost.setup.agentDeploy': '部署 Agent',
   'remoteHost.setup.installManual': '手动安装',
   'remoteHost.setup.installAuto': '自动安装',
+  'remoteHost.setup.installFailed': '自动安装失败：{{error}}',
+  'remoteHost.setup.installFailedUnknown': '自动安装失败',
   'remoteHost.setup.retry': '重试',
   'remoteHost.setup.copyCommand': '复制命令',
   'remoteHost.errors.authFailed': 'SSH 认证失败',

@@ -160,9 +160,27 @@ export function RemoteHostList() {
     setSetupState(null);
 
     try {
+      // Step 1: Install Node.js and Claude CLI if needed
+      const installResult = await api.autoInstallDeps(host.id);
+      if (!installResult.success) {
+        showToast({
+          type: 'error',
+          message: installResult.error
+            ? t('remoteHost.setup.installFailed', { error: installResult.error })
+            : t('remoteHost.setup.installFailedUnknown'),
+        });
+        setStatusMap((prev) => ({ ...prev, [host.id]: 'failed' }));
+        setConnectingId(null);
+        return;
+      }
+
+      // Step 2: Deploy agent files
       await api.deployAgent(host.id);
+
+      // Step 3: Start agent
       await api.startAgent(host.id, host.agentPort);
 
+      // Step 4: Poll until agent is running (max 10 attempts, 1s each)
       let running = false;
       for (let i = 0; i < 10; i++) {
         running = await api.isAgentRunning(host.id, host.agentPort);
@@ -172,15 +190,19 @@ export function RemoteHostList() {
 
       setStatusMap((prev) => ({
         ...prev,
-        [host.id]: running ? "connected" : "failed",
+        [host.id]: running ? 'connected' : 'failed',
       }));
     } catch (err) {
       console.error('[remote] auto install failed:', err);
-      setStatusMap((prev) => ({ ...prev, [host.id]: "failed" }));
+      showToast({
+        type: 'error',
+        message: err instanceof Error ? err.message : String(err),
+      });
+      setStatusMap((prev) => ({ ...prev, [host.id]: 'failed' }));
     } finally {
       setConnectingId(null);
     }
-  }, [setupState, hosts]);
+  }, [setupState, hosts, t]);
 
   const handleDisconnect = useCallback(async (hostId: string) => {
     const api = getElectronRemoteAPI();

@@ -71,6 +71,7 @@ interface ElectronRemoteAPI {
     installPlan: import('../lib/remote/types').InstallPlan;
   }>;
   deployAgent: (hostId: string) => Promise<void>;
+  autoInstallDeps: (hostId: string) => Promise<{ success: boolean; error?: string }>;
   startAgent: (hostId: string, agentPort: number) => Promise<void>;
   isAgentRunning: (hostId: string, agentPort: number) => Promise<boolean>;
   onStatusChanged: (

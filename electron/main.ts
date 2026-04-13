@@ -27,7 +27,7 @@ import os from 'os';
 import { TerminalManager } from './terminal-manager';
 import { sshManager } from '../src/lib/remote/ssh-manager';
 import { remoteAgentClient } from '../src/lib/remote/agent-client';
-import { checkRemoteEnv, buildInstallPlan, deployAgent, startRemoteAgent, isAgentRunning } from '../src/lib/remote/setup-checker';
+import { checkRemoteEnv, buildInstallPlan, deployAgent, startRemoteAgent, isAgentRunning, autoInstallDeps } from '../src/lib/remote/setup-checker';
 import { logger, listLogFiles, readLogFile, exportLogFile } from '../src/lib/logger';
 import type { RemoteHostConfig } from '../src/lib/remote/types';
 import type { ClientMessage } from '../remote-agent/src/types';
@@ -1469,6 +1469,24 @@ app.whenReady().then(async () => {
       return { checkResult, installPlan };
     } catch (err) {
       logger.error('remote:check-env failed', { hostId, error: String(err) });
+      throw err;
+    }
+  });
+  ipcMain.handle('remote:auto-install-deps', async (_e, hostId: string) => {
+    logger.info('remote:auto-install-deps', { hostId });
+    const client = sshManager.getRawClient(hostId);
+    if (!client) {
+      logger.error('remote:auto-install-deps - not connected', { hostId });
+      throw new Error('Not connected');
+    }
+    try {
+      const checkResult = await checkRemoteEnv(client);
+      const installPlan = buildInstallPlan(checkResult, localAgentVersion);
+      const result = await autoInstallDeps(client, installPlan, checkResult.os);
+      logger.info('remote:auto-install-deps done', { hostId, result });
+      return result;
+    } catch (err) {
+      logger.error('remote:auto-install-deps failed', { hostId, error: String(err) });
       throw err;
     }
   });

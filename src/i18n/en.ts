@@ -1487,6 +1487,8 @@ const en = {
   'remoteHost.setup.agentDeploy': 'Deploy Agent',
   'remoteHost.setup.installManual': 'Manual Install',
   'remoteHost.setup.installAuto': 'Auto Install',
+  'remoteHost.setup.installFailed': 'Auto install failed: {{error}}',
+  'remoteHost.setup.installFailedUnknown': 'Auto install failed',
   'remoteHost.setup.retry': 'Retry',
   'remoteHost.setup.copyCommand': 'Copy Command',
   'remoteHost.errors.authFailed': 'SSH authentication failed',
