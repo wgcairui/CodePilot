@@ -54,6 +54,8 @@ export function BridgeSection() {
   const [workDir, setWorkDir] = useState("");
   const [model, setModel] = useState("");
   const [providerGroups, setProviderGroups] = useState<ProviderModelGroup[]>([]);
+  // tick counter — drives per-second re-render for reconnecting countdown
+  const [, setTick] = useState(0);
   const { bridgeStatus, starting, stopping, startBridge, stopBridge } = useBridgeStatus();
   const { t } = useTranslation();
 
@@ -100,13 +102,12 @@ export function BridgeSection() {
 
   // Drives per-second countdown re-render for reconnecting adapters.
   // Only active when at least one adapter is in reconnecting state.
-  const [, setTick] = useState(0);
+  const hasReconnecting = bridgeStatus?.adapters.some(a => a.reconnectingAt) ?? false;
   useEffect(() => {
-    const hasReconnecting = bridgeStatus?.adapters.some(a => a.reconnectingAt);
     if (!hasReconnecting) return;
     const id = setInterval(() => setTick(t => t + 1), 1000);
     return () => clearInterval(id);
-  }, [bridgeStatus]);
+  }, [hasReconnecting, setTick]);
 
   const saveSettings = async (updates: Partial<BridgeSettings>) => {
     setSaving(true);
