@@ -531,6 +531,7 @@ function runAdapterLoop(adapter: BaseChannelAdapter): void {
       console.error(`[bridge-manager] ${adapter.channelType} loop crashed:`, err);
       const meta = state.adapterMeta.get(adapter.channelType) || { lastMessageAt: null, lastError: null };
       meta.lastError = errMsg;
+      meta.reconnectingAt = null;   // clear stale timestamp on unexpected crash
       state.adapterMeta.set(adapter.channelType, meta);
     }
   });
