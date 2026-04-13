@@ -98,6 +98,16 @@ export function BridgeSection() {
     fetchModels();
   }, [fetchSettings, fetchModels]);
 
+  // Drives per-second countdown re-render for reconnecting adapters.
+  // Only active when at least one adapter is in reconnecting state.
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const hasReconnecting = bridgeStatus?.adapters.some(a => a.reconnectingAt);
+    if (!hasReconnecting) return;
+    const id = setInterval(() => setTick(t => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [bridgeStatus]);
+
   const saveSettings = async (updates: Partial<BridgeSettings>) => {
     setSaving(true);
     try {
@@ -396,17 +406,31 @@ export function BridgeSection() {
                   <span className="text-xs font-medium capitalize">
                     {adapter.channelType}
                   </span>
-                  <div
-                    className={`rounded px-2 py-0.5 text-xs ${
-                      adapter.running
-                        ? "bg-status-success-muted text-status-success-foreground"
-                        : "bg-muted text-muted-foreground"
-                    }`}
-                  >
-                    {adapter.running
-                      ? t("bridge.adapterRunning")
-                      : t("bridge.adapterStopped")}
-                  </div>
+                  {(() => {
+                    if (adapter.running) {
+                      return (
+                        <div className="rounded px-2 py-0.5 text-xs bg-status-success-muted text-status-success-foreground">
+                          {t("bridge.adapterRunning")}
+                        </div>
+                      );
+                    }
+                    if (adapter.reconnectingAt) {
+                      const secondsLeft = Math.max(
+                        0,
+                        Math.round((new Date(adapter.reconnectingAt).getTime() - Date.now()) / 1000),
+                      );
+                      return (
+                        <div className="rounded px-2 py-0.5 text-xs bg-status-warning-muted text-status-warning-foreground">
+                          {t("bridge.adapterReconnecting", { seconds: String(secondsLeft) })}
+                        </div>
+                      );
+                    }
+                    return (
+                      <div className="rounded px-2 py-0.5 text-xs bg-muted text-muted-foreground">
+                        {t("bridge.adapterStopped")}
+                      </div>
+                    );
+                  })()}
                 </div>
                 {adapter.lastMessageAt && (
                   <p className="text-xs text-muted-foreground">

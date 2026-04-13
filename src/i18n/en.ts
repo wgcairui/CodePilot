@@ -767,6 +767,7 @@ const en = {
   'bridge.autoStartDesc': 'Automatically start the bridge when the application launches',
   'bridge.adapterRunning': 'Running',
   'bridge.adapterStopped': 'Stopped',
+  'bridge.adapterReconnecting': 'Reconnecting in {seconds}s',
   'bridge.adapterLastMessage': 'Last message',
   'bridge.adapterLastError': 'Last error',
   'bridge.adapters': 'Adapter Status',

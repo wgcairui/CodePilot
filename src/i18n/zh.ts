@@ -764,6 +764,7 @@ const zh: Record<TranslationKey, string> = {
   'bridge.autoStartDesc': '应用启动时自动启动桥接',
   'bridge.adapterRunning': '运行中',
   'bridge.adapterStopped': '已停止',
+  'bridge.adapterReconnecting': '{seconds}秒后重连',
   'bridge.adapterLastMessage': '最近消息',
   'bridge.adapterLastError': '最近错误',
   'bridge.adapters': '适配器状态',
