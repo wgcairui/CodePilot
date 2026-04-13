@@ -15,6 +15,11 @@
 - ⚠️ WeChat chatId 本身含 `::` — 复合键 `channelType::chatId` 拆分必须用 `indexOf` 取第一个 `::`，不能用 `split('::')[0]`
 - Bridge 推送字段存为非规范化列（`bridge_channel_type` + `bridge_chat_id`），不用 FK — 绑定重建后任务配置仍有效
 
+## `runAdapterLoop` 递归模式注意事项
+
+`runAdapterLoop` 在退避重连失败时递归调用自身，每次调用都会用新的 `AbortController` 覆盖 `loopAborts` 中的旧条目。旧 controller 不需要主动 abort（调用方的 IIFE 已经退出），`stop()` 始终操作最新的 controller。
+⚠️ 不要在 `runAdapterLoop(adapter)` 递归调用语句**之后**添加任何逻辑——调用栈假设它是最后一条语句。
+
 ## 详细架构
 
 见 `docs/handover/bridge-system.md`
