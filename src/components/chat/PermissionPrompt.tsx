@@ -27,6 +27,11 @@ import { cn } from '@/lib/utils';
 import type { ToolUIPart } from 'ai';
 import type { PermissionRequestEvent } from '@/types';
 
+// Tools that require user interaction even in full_access mode.
+// AskUserQuestion's entire purpose is to get user input — auto-approving
+// would return empty answers, defeating the purpose.
+const NEVER_AUTO_APPROVE = new Set(['AskUserQuestion']);
+
 interface ToolUseInfo {
   id: string;
   name: string;
@@ -387,11 +392,6 @@ export function PermissionPrompt({
   permissionProfile,
 }: PermissionPromptProps) {
   const { t } = useTranslation();
-
-  // Tools that require user interaction even in full_access mode.
-  // AskUserQuestion's entire purpose is to get user input — auto-approving
-  // would return empty answers, defeating the purpose.
-  const NEVER_AUTO_APPROVE = new Set(['AskUserQuestion']);
 
   // Auto-approve when full_access is active — except for interactive tools
   const autoApprovedRef = useRef<string | null>(null);
