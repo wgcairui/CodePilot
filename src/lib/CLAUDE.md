@@ -31,10 +31,9 @@
 ## sdkProxyOnly Providers（MiniMax / Kimi / GLM 等）
 
 ⚠️ `provider-resolver.ts` `buildResolution()` 中对这类 provider 有以下特殊处理：
-- `settingSources` 为 `['project', 'local']`（**不含 `'user'`**）— 防止 `~/.claude/settings.json` 的 `env` 节覆盖 provider 凭据
-  - SDK 加载 settings.json 的 `env` 节会**叠加覆盖** process.env（不是反过来），因此 process.env 保护无效
-  - ⚠️ 不能将 `'user'` 加入 sdkProxyOnly providers 的 settingSources，否则用户的 `ANTHROPIC_API_KEY`/`ANTHROPIC_BASE_URL` 会覆盖 MiniMax/Kimi 凭据，导致 "Invalid API Key" 错误
-  - 副作用：`~/.claude/` 下的 skills/hooks 对这类 provider 不可用（结构性限制，SDK API 无法区分 env 和 plugins）
+- `settingSources` 为 `['user']`（**所有 DB-backed provider 统一**）— cc-switch 环境变量泄漏通过 per-request shadow HOME（`sdk-subprocess-env.ts` + `claude-home-shadow.ts`）在文件系统层隔离：shadow HOME 中的 `settings.json` 会删除 `ANTHROPIC_*` 键，保留其余配置（skills/hooks/MCP）
+  - **v0.50.2 变更**：不再依赖 `settingSources` 排除来防止凭据泄漏（旧方案：sdkProxyOnly = `['project','local']`，副作用是禁用 `~/.claude/` 下的 skills/hooks）
+  - shadow HOME 方案更完整：`'user'` 留在 settingSources，用户的 skills/hooks/MCP 对所有 provider 均可用
 - catalog `defaultEnvOverrides` 在运行时合并为 base（DB 值优先）— 确保 `CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1` 等始终生效（不依赖 DB 是否保存）
 - `claude-client.ts` 中跳过 `thinking` 参数和默认 `effort: 'medium'` — 这类 provider 的代理协议不支持
 

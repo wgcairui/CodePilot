@@ -98,7 +98,7 @@ describe('toClaudeCodeEnv: env shape after CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST 
       hasCredentials: true,
       availableModels: [],
       sdkProxyOnly: false,
-      settingSources: ['project', 'local'],
+      settingSources: ['user'],
     };
     const env = toClaudeCodeEnv({
       PATH: '/usr/bin',

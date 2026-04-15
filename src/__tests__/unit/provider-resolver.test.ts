@@ -315,7 +315,7 @@ describe('Provider Resolver', () => {
         roleModels: {},
         hasCredentials: true,
         availableModels: [],
-        settingSources: ['project', 'local'],
+        settingSources: ['user'],
         sdkProxyOnly: false,
       };
 
@@ -356,7 +356,7 @@ describe('Provider Resolver', () => {
         roleModels: {},
         hasCredentials: true,
         availableModels: [],
-        settingSources: ['project', 'local'],
+        settingSources: ['user'],
         sdkProxyOnly: false,
       };
 
@@ -399,7 +399,7 @@ describe('Provider Resolver', () => {
         roleModels: {},
         hasCredentials: true,
         availableModels: [],
-        settingSources: ['project', 'local'],
+        settingSources: ['user'],
         sdkProxyOnly: false,
       };
 
@@ -443,7 +443,7 @@ describe('Provider Resolver', () => {
         },
         hasCredentials: true,
         availableModels: [],
-        settingSources: ['project', 'local'],
+        settingSources: ['user'],
         sdkProxyOnly: false,
       };
 
@@ -498,7 +498,7 @@ describe('Provider Resolver', () => {
         roleModels: {},
         hasCredentials: true,
         availableModels: [],
-        settingSources: ['project', 'local'],
+        settingSources: ['user'],
         sdkProxyOnly: false,
       };
 
@@ -528,7 +528,7 @@ describe('Provider Resolver', () => {
         roleModels: {},
         hasCredentials: true,
         availableModels: [],
-        settingSources: ['project', 'local'],
+        settingSources: ['user'],
         sdkProxyOnly: false,
       };
 
@@ -559,7 +559,7 @@ describe('Provider Resolver', () => {
         roleModels: {},
         hasCredentials: true,
         availableModels: [],
-        settingSources: ['project', 'local'],
+        settingSources: ['user'],
         sdkProxyOnly: false,
       };
 
@@ -589,7 +589,7 @@ describe('Provider Resolver', () => {
         roleModels: {},
         hasCredentials: true,
         availableModels: [],
-        settingSources: ['project', 'local'],
+        settingSources: ['user'],
         sdkProxyOnly: false,
       };
 
@@ -616,7 +616,7 @@ describe('Provider Resolver', () => {
         roleModels: {},
         hasCredentials: true,
         availableModels: [],
-        settingSources: ['project', 'local'],
+        settingSources: ['user'],
         sdkProxyOnly: false,
       };
 
@@ -643,7 +643,7 @@ describe('Provider Resolver', () => {
         roleModels: {},
         hasCredentials: true,
         availableModels: [],
-        settingSources: ['project', 'local'],
+        settingSources: ['user'],
         sdkProxyOnly: false,
       };
 
@@ -794,7 +794,7 @@ describe('Upstream Model ID Mapping', () => {
         { modelId: 'sonnet', upstreamModelId: 'glm-5-turbo', displayName: 'GLM-5-Turbo' },
         { modelId: 'opus', upstreamModelId: 'glm-5.1', displayName: 'GLM-5.1' },
       ],
-      settingSources: ['project', 'local'],
+      settingSources: ['user'],
       sdkProxyOnly: false,
     };
 
@@ -830,7 +830,7 @@ describe('Upstream Model ID Mapping', () => {
       roleModels: { default: 'glm-5-turbo', sonnet: 'glm-5-turbo', opus: 'glm-5.1' },
       hasCredentials: true,
       availableModels: [],
-      settingSources: ['project', 'local'],
+      settingSources: ['user'],
       sdkProxyOnly: false,
     };
 
@@ -974,7 +974,7 @@ describe('Entry Point Resolution Contract', () => {
       availableModels: [
         { modelId: 'sonnet', upstreamModelId: 'glm-5-turbo', displayName: 'GLM-5-Turbo' },
       ],
-      settingSources: ['project', 'local'],
+      settingSources: ['user'],
       sdkProxyOnly: false,
     };
 
@@ -1171,7 +1171,7 @@ describe('routeAuxiliaryModel (pure routing)', () => {
         roleModels,
         hasCredentials: false,
         availableModels: [],
-        settingSources: ['project', 'local'],
+        settingSources: ['user'],
         sdkProxyOnly: false,
       };
     }
@@ -1203,7 +1203,7 @@ describe('routeAuxiliaryModel (pure routing)', () => {
       roleModels,
       hasCredentials: true,
       availableModels: [],
-      settingSources: ['project', 'local'],
+      settingSources: ['user'],
       sdkProxyOnly: false,
     };
   }

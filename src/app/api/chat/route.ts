@@ -12,13 +12,13 @@ import { HEARTBEAT_TRIGGER_PHRASE } from '@/lib/heartbeat';
 import { wrapController } from '@/lib/safe-stream';
 import { ensureSchedulerRunning } from '@/lib/task-scheduler';
 import { predictNativeRuntime } from '@/lib/runtime';
-
-// Start the task scheduler on first API call
-ensureSchedulerRunning();
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+
+// Start the task scheduler on first API call
+ensureSchedulerRunning();
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
