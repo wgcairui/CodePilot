@@ -517,7 +517,13 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
         token_usage: null,
       };
       cappedSetMessages((prev) => [...prev, userMessage]);
-      doStartStream(next.content, next.files, next.systemPromptAppend, next.displayOverride);
+      try {
+        doStartStream(next.content, next.files, next.systemPromptAppend, next.displayOverride);
+      } catch (e) {
+        // doStartStream failed synchronously — reset guard so subsequent queue items can still dequeue
+        dequeuingRef.current = false;
+        throw e;
+      }
     }
     if (isStreaming) {
       dequeuingRef.current = false;

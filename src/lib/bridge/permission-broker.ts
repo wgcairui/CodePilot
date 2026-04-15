@@ -227,18 +227,6 @@ export async function forwardPermissionRequest(
       inlineButtons: askCard.inlineButtons,
       replyToMessageId,
     };
-    // Also store the original questions payload so the callback handler
-    // can echo them back as updatedInput when an option is chosen.
-    try {
-      insertPermissionLink({
-        permissionRequestId,
-        channelType: adapter.channelType,
-        chatId: address.chatId,
-        messageId: '', // will be updated after delivery
-        toolName,
-        suggestions: JSON.stringify(toolInput), // reuse field — carries AUQ input
-      });
-    } catch { /* best effort */ }
   } else {
     // Default permission card (Allow / Allow Session / Deny)
     const inputStr = JSON.stringify(toolInput, null, 2);
@@ -285,30 +273,17 @@ export async function forwardPermissionRequest(
   const result = await deliver(adapter, message, { sessionId });
 
   // Record the link so we can match callback queries back to this permission.
-  // For AskUserQuestion we pre-inserted; here we update messageId if needed.
+  // AskUserQuestion carries the full toolInput as suggestions (for callback reply construction).
   if (result.ok && result.messageId) {
     try {
-      if (askCard) {
-        // Update the pre-inserted link with the actual message ID.
-        // (Simple re-insert; insertPermissionLink uses INSERT OR REPLACE semantics.)
-        insertPermissionLink({
-          permissionRequestId,
-          channelType: adapter.channelType,
-          chatId: address.chatId,
-          messageId: result.messageId,
-          toolName,
-          suggestions: JSON.stringify(toolInput),
-        });
-      } else {
-        insertPermissionLink({
-          permissionRequestId,
-          channelType: adapter.channelType,
-          chatId: address.chatId,
-          messageId: result.messageId,
-          toolName,
-          suggestions: suggestions ? JSON.stringify(suggestions) : '',
-        });
-      }
+      insertPermissionLink({
+        permissionRequestId,
+        channelType: adapter.channelType,
+        chatId: address.chatId,
+        messageId: result.messageId,
+        toolName,
+        suggestions: askCard ? JSON.stringify(toolInput) : (suggestions ? JSON.stringify(suggestions) : ''),
+      });
     } catch { /* best effort */ }
   }
 }
