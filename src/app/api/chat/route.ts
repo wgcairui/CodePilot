@@ -10,6 +10,7 @@ import type { SendMessageRequest, SSEEvent, TokenUsage, MessageContentBlock, Fil
 import { saveMediaToLibrary } from '@/lib/media-saver';
 import { wrapController } from '@/lib/safe-stream';
 import { ensureSchedulerRunning } from '@/lib/task-scheduler';
+import { predictNativeRuntime } from '@/lib/runtime';
 
 // Start the task scheduler on first API call
 ensureSchedulerRunning();
@@ -256,8 +257,9 @@ export async function POST(request: NextRequest) {
     // Load MCP servers for the predicted runtime:
     // - SDK Runtime: only needs servers with ${...} env placeholders (SDK loads the rest via settingSources)
     // - Native Runtime: needs ALL servers (it manages MCP connections independently)
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { predictNativeRuntime } = require('@/lib/runtime') as typeof import('@/lib/runtime');
+    // Note: was a lazy `require()` previously; converted to static import after
+    // Turbopack's CJS↔ESM interop started returning `{ default: ... }` shape
+    // and broke "predictNativeRuntime is not a function" at runtime.
     const mcpServers = predictNativeRuntime(effectiveProviderId)
       ? loadAllMcpServers()
       : loadCodePilotMcpServers();

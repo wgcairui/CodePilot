@@ -29,6 +29,25 @@ import { resolveWorkingDirectory } from './working-directory';
 import { wrapController } from './safe-stream';
 import { type ShadowHome } from './claude-home-shadow';
 import { prepareSdkSubprocessEnv } from './sdk-subprocess-env';
+// Static imports for resolveRuntime/detectTransport — used to be lazy
+// `require('./runtime')` / `require('./provider-transport')`, but Turbopack's
+// CJS↔ESM interop returns `{ default: ... }` shape that broke destructuring
+// at runtime ("resolveRuntime is not a function" etc).
+//
+// IMPORTANT: import from `./runtime/registry` NOT from `./runtime` (== index).
+// runtime/index.ts imports native-runtime AND sdk-runtime at top-level and
+// registers them. sdk-runtime in turn imports FROM this file (claude-client).
+// Importing `./runtime` here closes the cycle
+// claude-client → runtime/index → sdk-runtime → claude-client
+// and during evaluation of sdk-runtime's `export const sdkRuntime = {...}`,
+// runtime/index's own `registerRuntime(sdkRuntime)` line hits the TDZ and
+// throws "Cannot access 'sdkRuntime' before initialization" (caught by
+// sdk-availability.test.ts under certain module load orders).
+// registry.ts only imports types/db/claude-settings — no cycle. The actual
+// runtime registration still happens elsewhere (runtime/index is imported
+// via its own entry points at app startup).
+import { resolveRuntime, getRuntime } from './runtime/registry';
+import { detectTransport, isNativeCompatible } from './provider-transport';
 import os from 'os';
 import fs from 'fs';
 import path from 'path';
@@ -411,11 +430,6 @@ export async function generateTextViaSdk(params: {
  * the appropriate runtime, and delegates.
  */
 export function streamClaude(options: ClaudeStreamOptions): ReadableStream<string> {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { resolveRuntime, getRuntime } = require('./runtime') as typeof import('./runtime');
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { detectTransport, isNativeCompatible } = require('./provider-transport') as typeof import('./provider-transport');
-
   // ── Capability-aware routing ────────────────────────────────
   // Route to the right runtime based on provider + user setting.
   const cliDisabled = getSetting('cli_enabled') === 'false';
@@ -584,11 +598,26 @@ export function streamClaudeSdk(options: ClaudeStreamOptions): ReadableStream<st
             : ((permissionMode as Options['permissionMode']) || 'acceptEdits'),
           env: sanitizeEnv(sdkEnv),
           // Load settings so the SDK behaves like the CLI (tool permissions,
-          // CLAUDE.md, etc.). When an active provider is configured in
-          // CodePilot, skip 'user' settings because ~/.claude/settings.json
-          // may contain env overrides (ANTHROPIC_BASE_URL, ANTHROPIC_MODEL,
-          // etc.) that would conflict with the provider's configuration.
+          // CLAUDE.md, etc.). For DB providers settingSources is ['user'] only;
+          // for env mode it's ['user', 'project', 'local']. See provider-resolver.ts.
           settingSources: resolved.settingSources as Options['settingSources'],
+          // Auto-allow all CodePilot built-in MCPs. These are host-defined
+          // in-process servers (createSdkMcpServer in claude-client.ts below)
+          // that ship with CodePilot — they're not third-party plugins and
+          // don't need per-tool user approval. Without this list, SDK's
+          // default 'acceptEdits' mode prompts the user for each mcp__codepilot-*
+          // invocation, which is the regression users reported after we
+          // stopped silently allowing everything via project-level settings.
+          allowedTools: [
+            'mcp__codepilot-memory',
+            'mcp__codepilot-notify',
+            'mcp__codepilot-widget',
+            'mcp__codepilot-widget-guidelines',
+            'mcp__codepilot-media',
+            'mcp__codepilot-image-gen',
+            'mcp__codepilot-cli-tools',
+            'mcp__codepilot-dashboard',
+          ],
         };
 
         if (skipPermissions) {
