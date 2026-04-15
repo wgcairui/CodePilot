@@ -6,7 +6,8 @@
  */
 
 import type { AgentRuntime } from './types';
-import { getSetting, getAllProviders, getProvider } from '../db';
+import { getSetting, getAllProviders, getProvider } from '@/lib/db';
+import { hasClaudeSettingsCredentials } from '@/lib/claude-settings';
 
 const runtimes = new Map<string, AgentRuntime>();
 
@@ -37,29 +38,47 @@ export function getAvailableRuntimes(): AgentRuntime[] {
  * This check prevents auto mode from selecting SDK when the user
  * has zero credentials configured (#456).
  */
-function hasCredentialsForRequest(providerId?: string): boolean {
-  // Env vars and legacy DB — always checked
+/**
+ * Check if the request's provider has credentials the SDK can use.
+ * When providerId is 'env' or empty, only checks env vars / legacy DB.
+ * When providerId points to a DB provider, checks that specific provider.
+ * When no providerId, checks all providers (any credential = true).
+ */
+export function hasCredentialsForRequest(providerId?: string): boolean {
+  // Env vars and legacy DB — always checked, regardless of provider scope
   if (process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN) return true;
   if (getSetting('anthropic_auth_token')) return true;
 
-  // 'env' provider: only env credentials matter (checked above)
-  if (providerId === 'env') return false;
+  // ── Provider-group ownership rule ───────────────────────────────────────
+  // ~/.claude/settings.json (cc-switch / hand-edited) is the credential source
+  // for the BUILT-IN "Claude Code" group only — providerId === 'env' or no
+  // provider explicitly chosen. For an explicit DB provider, this file MUST
+  // NOT supply credentials: the user picked Kimi/GLM/OpenRouter precisely
+  // because they want THAT provider's auth, not whatever cc-switch wrote.
+  // See docs/exec-plans/active/cc-switch-credential-bridge.md §"凭据归属".
 
-  // Specific DB provider requested: check THAT provider's credentials.
-  // If provider doesn't exist (stale binding), fall through to check all —
-  // mirrors resolveProvider()'s fallback to default/active provider.
+  // Specific DB provider requested: only its own credentials count.
   if (providerId && providerId !== 'env') {
     try {
       const p = getProvider(providerId);
       if (p?.api_key) return true;
       if (p?.extra_env?.includes('CLAUDE_CODE_USE_BEDROCK')) return true;
       if (p?.extra_env?.includes('CLAUDE_CODE_USE_VERTEX')) return true;
-      if (p) return false; // provider exists but has no credentials
-      // provider doesn't exist → fall through to check all (fallback chain)
+      if (p) return false; // provider exists but has no credentials — DO NOT fall back to settings.json
+      // provider doesn't exist (stale binding) → fall through to env-scope checks
     } catch { /* DB not ready */ }
   }
 
-  // No specific provider — check all (covers session-level provider resolution)
+  // 'env' group OR no provider specified: settings.json IS a valid credential
+  // source (cc-switch users without a CodePilot DB provider).
+  if (hasClaudeSettingsCredentials()) return true;
+
+  // 'env' provider explicitly: only env-scope credentials matter (checked above)
+  if (providerId === 'env') return false;
+
+  // No provider specified — check all DB providers (session-level resolution
+  // may pick any of them). This is the legitimate "auto-pick something usable"
+  // fallback before we land in the env group.
   try {
     for (const p of getAllProviders()) {
       if (p.api_key) return true;

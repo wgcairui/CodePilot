@@ -173,6 +173,7 @@ interface MessageListProps {
   /** SDK rewind points — only emitted for visible prompt-level user messages (not tool results or auto-triggers), mapped by position */
   rewindPoints?: RewindPoint[];
   sessionId?: string;
+  startedAt?: number;
   /** Whether this is an assistant workspace project */
   isAssistantProject?: boolean;
   /** Assistant name for avatar display */
@@ -194,6 +195,7 @@ export function MessageList({
   onLoadMore,
   rewindPoints = [],
   sessionId,
+  startedAt,
   isAssistantProject,
   assistantName,
 }: MessageListProps) {
@@ -313,6 +315,7 @@ export function MessageList({
             content={streamingContent}
             isStreaming={isStreaming}
             sessionId={sessionId}
+            startedAt={startedAt!}
             toolUses={toolUses}
             toolResults={toolResults}
             streamingToolOutput={streamingToolOutput}

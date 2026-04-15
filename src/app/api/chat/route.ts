@@ -9,6 +9,12 @@ import { assembleContext } from '@/lib/context-assembler';
 import type { SendMessageRequest, SSEEvent, TokenUsage, MessageContentBlock, FileAttachment, ClaudeStreamOptions, MediaBlock } from '@/types';
 import { saveMediaToLibrary } from '@/lib/media-saver';
 import { HEARTBEAT_TRIGGER_PHRASE } from '@/lib/heartbeat';
+import { wrapController } from '@/lib/safe-stream';
+import { ensureSchedulerRunning } from '@/lib/task-scheduler';
+import { predictNativeRuntime } from '@/lib/runtime';
+
+// Start the task scheduler on first API call
+ensureSchedulerRunning();
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
@@ -252,8 +258,9 @@ export async function POST(request: NextRequest) {
     // Load MCP servers for the predicted runtime:
     // - SDK Runtime: only needs servers with ${...} env placeholders (SDK loads the rest via settingSources)
     // - Native Runtime: needs ALL servers (it manages MCP connections independently)
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const { predictNativeRuntime } = require('@/lib/runtime') as typeof import('@/lib/runtime');
+    // Note: was a lazy `require()` previously; converted to static import after
+    // Turbopack's CJS↔ESM interop started returning `{ default: ... }` shape
+    // and broke "predictNativeRuntime is not a function" at runtime.
     const mcpServers = predictNativeRuntime(effectiveProviderId)
       ? loadAllMcpServers()
       : loadCodePilotMcpServers();
@@ -405,7 +412,8 @@ export async function POST(request: NextRequest) {
     // meaningful, and includes structured data for future rich UI handling.
     const responseStream = compressionOccurred
       ? new ReadableStream<string>({
-          async start(controller) {
+          async start(controllerRaw) {
+            const controller = wrapController(controllerRaw);
             const msgCount = compressionStats?.messagesCompressed ?? 0;
             const tokensSaved = compressionStats?.tokensSaved ?? 0;
             const displayMessage = tokensSaved > 0
@@ -426,6 +434,7 @@ export async function POST(request: NextRequest) {
                 const { done, value } = await reader.read();
                 if (done) break;
                 controller.enqueue(value);
+                if (controller.closed) break; // consumer aborted
               }
             } finally {
               controller.close();
