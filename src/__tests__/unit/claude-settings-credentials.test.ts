@@ -255,90 +255,12 @@ describe('cc-switch end-to-end (no CodePilot provider, settings.json only)', () 
 
 // ── Provider-group ownership of credentials ──
 //
-// The settings.json credentials only count for the env group (provider_id='env'
-// or no specific provider). For an explicit DB provider, the request must NOT
-// be "rescued" by cc-switch — the user picked Kimi/GLM precisely because they
-// want THAT provider's auth.
-describe('hasCredentialsForRequest — provider-group ownership', () => {
-  // Explicitly scrub ANTHROPIC_* env vars and the legacy DB token the function
-  // short-circuits on — otherwise CI runners that inherit these from the
-  // workflow or a prior test's state will make the function return true before
-  // it reaches the provider-ownership branch we're testing.
-  const savedApiKey = process.env.ANTHROPIC_API_KEY;
-  const savedAuthToken = process.env.ANTHROPIC_AUTH_TOKEN;
-  let savedDbToken: string | undefined;
-
-  beforeEach(async () => {
-    delete process.env.ANTHROPIC_API_KEY;
-    delete process.env.ANTHROPIC_AUTH_TOKEN;
-    const { getSetting, setSetting } = await import('@/lib/db');
-    savedDbToken = getSetting('anthropic_auth_token');
-    setSetting('anthropic_auth_token', '');
-  });
-
-  afterEach(async () => {
-    if (savedApiKey !== undefined) process.env.ANTHROPIC_API_KEY = savedApiKey;
-    if (savedAuthToken !== undefined) process.env.ANTHROPIC_AUTH_TOKEN = savedAuthToken;
-    if (savedDbToken !== undefined) {
-      const { setSetting } = await import('@/lib/db');
-      setSetting('anthropic_auth_token', savedDbToken);
-    }
-  });
-
-  it('env group + settings.json creds → has credentials', async () => {
-    writeSettings('settings.json', { env: { ANTHROPIC_AUTH_TOKEN: 'sk-cc-switch' } });
-    const { hasCredentialsForRequest } = await import('../../lib/runtime/registry');
-    // Per user requirements: env group ("内建的 Claude Code") fully respects
-    // Claude Code's own config sources, including ~/.claude/settings.json.
-    assert.equal(hasCredentialsForRequest('env'), true,
-      "providerId='env' (Claude Code group) MUST recognize settings.json as a credential source — that's the cc-switch path");
-    assert.equal(hasCredentialsForRequest(undefined), true,
-      'unspecified provider DOES use settings.json (auto-pick path for cc-switch users without DB providers)');
-  });
-
-  // FIXME(ci): This test passes on local (macOS, node 22, tsx 4.21) but fails
-  // on CI (ubuntu, node 20, same tsx). `getProvider(id)` returns undefined for
-  // the newly-created provider there even though `createProvider` succeeded,
-  // making the function fall through to `hasClaudeSettingsCredentials()` which
-  // returns true. Likely tsx module-identity quirk for mixed @/lib/db vs
-  // ../../lib/db dynamic imports on Linux. Tracking in tech-debt; the ownership
-  // logic is also exercised by the cc-switch integration suite above that does
-  // pass on CI, so we're not losing coverage of the rule — just of this
-  // specific boundary assertion.
-  (process.env.CI ? it.skip : it)('DB provider WITHOUT api_key → returns false even when settings.json has creds', async () => {
-    // The key regression test: settings.json must NOT rescue a misconfigured
-    // DB provider. User explicitly picked Kimi → if Kimi has no key, that's
-    // a "Kimi config error", NOT a "use my Anthropic key" silent fallback.
-    writeSettings('settings.json', { env: { ANTHROPIC_AUTH_TOKEN: 'sk-cc-switch-leak' } });
-
-    const { createProvider } = await import('@/lib/db');
-    const dbProvider = createProvider({
-      name: 'Kimi (no key configured)',
-      provider_type: 'anthropic',
-      base_url: 'https://kimi.example.com',
-      api_key: '', // intentionally empty — user forgot to add one
-    });
-
-    const { hasCredentialsForRequest } = await import('../../lib/runtime/registry');
-    assert.equal(
-      hasCredentialsForRequest(dbProvider.id),
-      false,
-      'DB provider with no key MUST return false — settings.json must not silently rescue it',
-    );
-  });
-
-  it('DB provider WITH api_key → returns true (uses its own creds)', async () => {
-    writeSettings('settings.json', { env: { ANTHROPIC_AUTH_TOKEN: 'sk-cc-switch-leak' } });
-
-    const { createProvider } = await import('@/lib/db');
-    const dbProvider = createProvider({
-      name: 'Kimi (configured)',
-      provider_type: 'anthropic',
-      base_url: 'https://kimi.example.com',
-      api_key: 'sk-real-kimi-key',
-    });
-
-    const { hasCredentialsForRequest } = await import('../../lib/runtime/registry');
-    assert.equal(hasCredentialsForRequest(dbProvider.id), true);
-  });
-});
+// The previous `hasCredentialsForRequest()` helper was removed in 0.50.3 when
+// `resolveRuntime`'s auto mode switched to a pure CLI binary check. Provider-
+// group ownership (settings.json may only supply the env group, never an
+// explicit DB provider) is still enforced — but now by `claude-home-shadow.ts`
+// stripping ANTHROPIC_* from the SDK subprocess when a DB provider is active.
+// See `claude-home-shadow.test.ts` for the direct coverage of that rule. The
+// cc-switch end-to-end suite above still exercises the "settings.json token is
+// recognized as a credential source for env mode" contract via resolveProvider
+// + createModel, which is what matters for user-facing behavior.
