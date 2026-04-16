@@ -63,10 +63,21 @@ export function ProviderCard({ status, onStatusChange }: ProviderCardProps) {
       setProviders(dbProviderList);
       setEnvDetected(hasEnv);
       // Promote to completed whenever ANY authoritative source agrees.
-      // /api/setup covers OAuth (virtual provider), DB providers covers the
-      // configured list, hasEnv covers the env-detected path — we keep all
-      // three so a stale/offline /api/setup can't regress the UX.
-      const anyReady = providerReady || dbProviderList.length > 0 || hasEnv;
+      // /api/setup is primary (covers OAuth virtual provider + DB providers).
+      // Fallbacks for when /api/setup is offline:
+      //   - anyDbProviderReady: DB provider with actual credentials (api_key is
+      //     masked "***…" when set, empty/null when absent; Bedrock/Vertex checked
+      //     via env_overrides_json substring)
+      //   - hasEnv: ANTHROPIC_API_KEY / ANTHROPIC_AUTH_TOKEN in env_detected
+      // We no longer use `dbProviderList.length > 0` alone — a record without
+      // credentials (e.g. half-configured) would cause false-positive `completed`
+      // while /api/chat would still return 412 NEEDS_PROVIDER_SETUP.
+      const anyDbProviderReady = dbProviderList.some(p => {
+        if (p.api_key) return true;
+        const envStr = p.env_overrides_json || p.extra_env || '';
+        return envStr.includes('CLAUDE_CODE_USE_BEDROCK') || envStr.includes('CLAUDE_CODE_USE_VERTEX');
+      });
+      const anyReady = providerReady || anyDbProviderReady || hasEnv;
       if (anyReady) {
         onStatusChange('completed');
       } else if (statusRef.current === 'completed') {

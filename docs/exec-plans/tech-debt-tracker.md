@@ -15,6 +15,7 @@
 | 5 | Bridge 的 `/mode plan` 在会话权限档位为 `full_access` 时仍会被 `bypassPermissions` 覆盖，导致 Plan 语义失效；需让 bridge 与桌面聊天一致，显式以 Plan 优先于 full_access | 中 | Bridge 远程会话的权限/安全语义 | 2026-03-25 |
 | 6 | Electron 主进程行为（外链拦截、窗口管理等）无自动化测试覆盖。现有 Playwright 测试只覆盖 Next.js web 层，需要搭建 `@playwright/test` + `_electron.launch()` 的 Electron E2E 测试框架 | 低 | Electron 主进程回归风险 | 2026-03-30 |
 | 7 | `claude-settings-credentials.test.ts` 的 "DB provider WITHOUT api_key" 和 `project-mcp-injection.test.ts` 的 "resolves ${...} env placeholders" 两条 regression test 在 CI（ubuntu/node 20）上用 `process.env.CI ? it.skip : it` 跳过了。根因疑似 tsx 对 `@/lib/db` 与 `../../lib/db` 动态 import 的 module identity 去重在 linux 上行为与 macOS 不一致：`createProvider` / `setSetting`（测试侧）写的 db 和 prod 代码里 `getProvider` / `getSetting`（registry / mcp-loader）读的 db 不是同一个句柄。本地两套都通过。需要深入排查 tsx + node 20 的 ESM 模块解析差异，或者改用依赖注入让测试不依赖真实 DB | 中 | 丢失一条 provider-ownership 边界断言 + 一条 env placeholder 解析断言的 CI 覆盖；其他测试仍覆盖相近路径 | 2026-04-15 |
+| 8 | Bridge `conversation-engine.ts` 直接调用 `streamClaude()` 而不经过 `/api/chat`，绕过了 v0.50.3 新增的 `hasCodePilotProvider()` 入口拦截。无 Provider 配置时 Bridge 发消息会收到 runtime resolver 的原始错误而非 `NEEDS_PROVIDER_SETUP` 引导流程。修复方案：在 `conversation-engine.ts` 中调用 `streamClaude()` 前先检查 `hasCodePilotProvider()`，false 时向 Bridge 返回 channel-appropriate 错误（如飞书/Discord 格式化的配置提示）。非回归——Bridge 从来不走 `/api/chat`，此为已知架构不对称 | 低 | Bridge 场景下"未配置服务商"用户体验降级（技术上不阻断，只是错误信息不友好） | 2026-04-16 |
 
 ## 已解决
 
